@@ -1,0 +1,6 @@
+pandas
+plotly
+PyQt5
+PyQtWebEngine
+requests
+beautifulsoup4
