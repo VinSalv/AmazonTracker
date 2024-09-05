@@ -139,6 +139,7 @@ def reset_filters(reset_search_bar=True):
         'Nome': lambda item: item[0].lower(),
         'URL': lambda item: item[1]['url'].lower(),
         'Prezzo': lambda item: item[1]['price'] if isinstance(item[1]['price'], (int, float)) else float('inf'),
+        'Notifica': lambda item: item[1]['notify'],
         'Timer': lambda item: item[1]['timer'],
         'Timer Aggiornamento [s]': lambda item: item[1]['timer_refresh'],
         'Data Inserimento': lambda item: item[1]['date_added'],
@@ -270,41 +271,42 @@ def start_tracking(name, url):
             if current_price is None:
                 logger.warning(f"Non trovato il prezzo di {name} sulla pagina {url}")
                 return
-
-            # Ottieni il prezzo precedente
-            previous_price = products[name]["price"] if isinstance(products[name]["price"], (int, float)) else get_last_price(name)
             
-            subject = "Prezzo in calo!"
-            body = (f"Il prezzo dell'articolo {name} è sceso da {previous_price}€ a {current_price}€\n"
-                    f"Acquista ora: {products[name]['url']}")
-            
-            if previous_price is None:
-                logger.warning(f"Non trovato il prezzo di {name} nelle liste")
-                return
-
-            # Invia notifiche se il prezzo attuale è inferiore al prezzo precedente
-            if current_price < previous_price:
-                send_notification(subject=subject, body=body)
-            
-            # Controlla se il prezzo è al di sotto delle soglie specificate e invia email
-            for key, value in products[name]["emails_and_thresholds"].items():
-                value_to_compare = previous_price
-                subject_to_send = subject
-                body_to_send = body
-
-                if value != 0.0:
-                    value_to_compare = value
-                    subject_to_send = "Prezzo inferiore alla soglia indicata!"
-                    body_to_send = (f"Il prezzo dell'articolo {name} è al di sotto della soglia di {value_to_compare}€ indicata.\n"
-                                    f"Il costo è {current_price}€\nAcquista ora: {products[name]['url']}")
-                
-                if current_price < value_to_compare:
-                    send_email(subject=subject_to_send, body=body_to_send, email_to_notify=key)
-
             # Aggiorna il prezzo del prodotto e salva i dati
             products[name]["price"] = current_price
             save_prices_data(name, products[name]["price"])
             save_data()
+            
+            if products[name]["notify"]:
+                # Ottieni il prezzo precedente
+                previous_price = get_last_price(name)
+
+                subject = "Prezzo in calo!"
+                body = (f"Il prezzo dell'articolo {name} è sceso da {previous_price}€ a {current_price}€\n"
+                        f"Acquista ora: {products[name]['url']}")
+                
+                if previous_price is None:
+                    logger.warning(f"Non trovato il prezzo di {name} nelle liste")
+                    return
+
+                # Invia notifiche se il prezzo attuale è inferiore al prezzo precedente
+                if current_price < previous_price:
+                    send_notification(subject=subject, body=body)
+                
+                # Controlla se il prezzo è al di sotto delle soglie specificate e invia email
+                for key, value in products[name]["emails_and_thresholds"].items():
+                    value_to_compare = previous_price
+                    subject_to_send = subject
+                    body_to_send = body
+
+                    if value != 0.0:
+                        value_to_compare = value
+                        subject_to_send = "Prezzo inferiore alla soglia indicata!"
+                        body_to_send = (f"Il prezzo dell'articolo {name} è al di sotto della soglia di {value_to_compare}€ indicata.\n"
+                                        f"Il costo è {current_price}€\nAcquista ora: {products[name]['url']}")
+                    
+                    if current_price < value_to_compare:
+                        send_email(subject=subject_to_send, body=body_to_send, email_to_notify=key)
 
         # Esegui il ciclo di monitoraggio finché non viene fermato
         while not stop_flags.get(name, False):
@@ -471,9 +473,8 @@ def center_window(window):
 
 def open_add_product_dialog():
     """
-    Apre una finestra di dialogo per aggiungere un nuovo prodotto con URL e opzioni avanzate.
+    Apre una finestra di dialogo per aggiungere un nuovo prodotto con URL e impostare altre opzioni.
     """
-    
     def on_entry_focus_in(event):
         """
         Mostra la Listbox dei suggerimenti quando l'Entry riceve il focus.
@@ -523,60 +524,6 @@ def open_add_product_dialog():
             name_entry.delete(0, tk.END)
             name_entry.insert(0, selected_name)
             listbox_suggestions.place_forget()
-
-    def on_add_product(name, url):
-        """
-        Aggiunge un nuovo prodotto e avvia il monitoraggio.
-        
-        Args:
-            name (str): Nome del prodotto.
-            url (str): URL del prodotto.
-        
-        Returns:
-            bool: True se il prodotto è stato aggiunto correttamente, False altrimenti.
-        """
-        def add_product(name, url):
-            if not name or not url:
-                messagebox.showwarning("Attenzione", "Compila tutti i campi!")
-                return False
-
-            # Verifica se il prodotto esiste già
-            for product_name in products:
-                if name == product_name:
-                    messagebox.showwarning("Attenzione", "Il nome del prodotto è già presente!\nCambia il nome")
-                    return False
-
-                if url == products[product_name]["url"]:
-                    messagebox.showwarning("Attenzione", "Questo articolo è già in monitoraggio!\nCambia url")
-                    return False
-
-            current_price = get_price(url)
-
-            if current_price is None:                
-                current_price = "Aggiorna o verifica url: - "
-                messagebox.showwarning("Attenzione", "Non è stato trovato il prezzo sulla pagina!\nAggiorna o verifica url")
-            
-            now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-            products[name] = {
-                "url": url,
-                "price": current_price,
-                "timer": time.time(),
-                "timer_refresh": timer_refresh,
-                "date_added": now,
-                "date_edited": now,
-                "emails_and_thresholds": emails_and_thresholds
-            }
-            
-            save_data()
-            save_prices_data(name, products[name]["price"]) 
-            start_tracking(name, url)
-            reset_filters()
-
-            return True
-
-        if add_product(name, url):
-            add_product_dialog.destroy()
 
     def open_advanced_dialog():
         """
@@ -745,10 +692,59 @@ def open_add_product_dialog():
         advanced_dialog.grab_set()
         center_window(advanced_dialog)
 
-    global emails_and_thresholds, timer_refresh
+    def add_product(name, url):
+        """
+        Aggiunge un nuovo prodotto e avvia il monitoraggio.
+        
+        Args:
+            name (str): Nome del prodotto.
+            url (str): URL del prodotto.
+        """
+        if not name or not url:
+                messagebox.showwarning("Attenzione", "Compila tutti i campi!")
+                return False
+
+        # Verifica se il prodotto esiste già
+        for product_name in products:
+            if name == product_name:
+                messagebox.showwarning("Attenzione", "Il nome del prodotto è già presente!\nCambia il nome")
+                return False
+
+            if url == products[product_name]["url"]:
+                messagebox.showwarning("Attenzione", "Questo articolo è già in monitoraggio!\nCambia url")
+                return False
+
+        current_price = get_price(url)
+
+        if current_price is None:                
+            current_price = "Aggiorna o verifica url: - "
+            messagebox.showwarning("Attenzione", "Non è stato trovato il prezzo sulla pagina!\nAggiorna o verifica url")
+        
+        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        products[name] = {
+            "url": url,
+            "price": current_price,
+            "notify": notify.get(),
+            "timer": time.time(),
+            "timer_refresh": timer_refresh,
+            "date_added": now,
+            "date_edited": now,
+            "emails_and_thresholds": emails_and_thresholds
+        }
+        
+        save_data()
+        save_prices_data(name, products[name]["price"]) 
+        start_tracking(name, url)
+        reset_filters()
+    
+        add_product_dialog.destroy()
+
+    global emails_and_thresholds, timer_refresh, notify
 
     emails_and_thresholds = {}
     timer_refresh = 1800
+    notify = tk.BooleanVar(value=True)
 
     # Crea la finestra di dialogo per aggiungere un prodotto
     add_product_dialog = tk.Toplevel(root)
@@ -781,22 +777,25 @@ def open_add_product_dialog():
     text_frame = ttk.Frame(container)
     text_frame.grid(row=1, column=1, padx=10, pady=10, sticky="we")
 
-    # Crea il widget Text
     url_text = tk.Text(text_frame, height=5, width=80, font=common_font)
     url_text.pack(side="left", fill="both", expand=True)
 
-    # Crea la scrollbar
     scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=url_text.yview)
     scrollbar.pack(side="right", fill="y")
 
     # Configura il widget Text per usare la scrollbar
     url_text.config(yscrollcommand=scrollbar.set)
 
+    ttk.Label(container, text="Notifiche:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
+
+    notify_checkbutton = ttk.Checkbutton(container, variable=notify)
+    notify_checkbutton.grid(row=2, column=1, padx=10, pady=10, sticky="we")
+
     # Bottone per aprire la finestra di dialogo avanzata
-    ttk.Button(container, text="Avanzate", command=open_advanced_dialog).grid(row=2, column=0, pady=10, sticky="w")
+    ttk.Button(container, text="Avanzate", command=open_advanced_dialog).grid(row=3, column=0, pady=10, sticky="w")
 
     # Bottone per aggiungere il prodotto
-    ttk.Button(container, text="Aggiungi", command=lambda: on_add_product(name_entry.get().strip().lower(), url_text.get("1.0", "end-1c").strip())).grid(row=2, column=1, pady=10, sticky="e")
+    ttk.Button(container, text="Aggiungi", command=lambda: add_product(name_entry.get().strip().lower(), url_text.get("1.0", "end-1c").strip())).grid(row=3, column=1, pady=10, sticky="e")
 
     add_product_dialog.transient(root)
     add_product_dialog.grab_set()
@@ -805,59 +804,8 @@ def open_add_product_dialog():
 
 def open_edit_product_dialog():
     """
-    Apre una finestra di dialogo per modificare un prodotto esistente con URL e opzioni avanzate.
+    Apre una finestra di dialogo per modificare l'URL di un prodotto esistente e impostare altre opzioni.
     """
-    
-    def on_edit_product(name, current_url, new_url):
-        """
-        Gestisce la modifica delle informazioni di un prodotto.
-        
-        Args:
-            name (str): Nome del prodotto.
-            current_url (str): URL attuale del prodotto.
-            new_url (str): Nuovo URL del prodotto.
-        
-        Returns:
-            bool: True se il prodotto è stato modificato correttamente, False altrimenti.
-        """
-        def edit_product(name, current_url, new_url):
-            if not new_url:
-                messagebox.showwarning("Attenzione", "Compila l'URL!")
-                return False
-
-            if current_url != new_url:
-                for product_name in products:
-                    if new_url == products[product_name]["url"]:
-                        messagebox.showwarning("Attenzione", "Questo articolo è già in monitoraggio!\nCambia l'URL")
-                        return False
-
-            new_price = get_price(new_url)
-
-            if new_price is None:                
-                products[name]["price"] = "Aggiorna o verifica l'URL: - "
-                messagebox.showwarning("Attenzione", "Non è stato trovato il prezzo sulla pagina!\nAggiorna o verifica l'URL")
-                logger.warning(f"Sul prodotto {name} non è stato trovato il prezzo sulla pagina " + products[name]["url"])
-            else:
-                products[name]["price"] = new_price
-
-            products[name]["url"] = new_url
-            products[name]["timer"] = time.time()
-            products[name]["timer_refresh"] = timer_refresh
-            products[name]["date_edited"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            products[name]["emails_and_thresholds"] = emails_and_thresholds
-
-            save_data()
-            save_prices_data(name, products[name]["price"])
-
-            reset_filters()
-
-            logger.info(f"Prodotto '{name}' modificato con successo")
-
-            return True
-
-        if edit_product(name, current_url, new_url):
-            edit_product_dialog.destroy()
-
     def open_advanced_dialog():
         """
         Apre una finestra di dialogo per configurare le email e le soglie di notifica avanzate.
@@ -1020,13 +968,58 @@ def open_edit_product_dialog():
         advanced_dialog.grab_set()
         center_window(advanced_dialog)
 
-    global emails_and_thresholds, timer_refresh
+    def edit_product(name, current_url, new_url):
+        """
+        Gestisce la modifica delle informazioni di un prodotto.
+        
+        Args:
+            name (str): Nome del prodotto.
+            current_url (str): URL attuale del prodotto.
+            new_url (str): Nuovo URL del prodotto.
+        """
+        if not new_url:
+                messagebox.showwarning("Attenzione", "Compila l'URL!")
+                return False
+
+        if current_url != new_url:
+            for product_name in products:
+                if new_url == products[product_name]["url"]:
+                    messagebox.showwarning("Attenzione", "Questo articolo è già in monitoraggio!\nCambia l'URL")
+                    return False
+
+        new_price = get_price(new_url)
+
+        if new_price is None:                
+            products[name]["price"] = "Aggiorna o verifica l'URL: - "
+            messagebox.showwarning("Attenzione", "Non è stato trovato il prezzo sulla pagina!\nAggiorna o verifica l'URL")
+            logger.warning(f"Sul prodotto {name} non è stato trovato il prezzo sulla pagina " + products[name]["url"])
+        else:
+            products[name]["price"] = new_price
+
+        products[name]["url"] = new_url
+        products[name]["notify"] = notify.get()
+        products[name]["timer"] = time.time()
+        products[name]["timer_refresh"] = timer_refresh
+        products[name]["date_edited"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        products[name]["emails_and_thresholds"] = emails_and_thresholds
+
+        save_data()
+        save_prices_data(name, products[name]["price"])
+
+        reset_filters()
+
+        logger.info(f"Prodotto '{name}' modificato con successo")
+
+        edit_product_dialog.destroy()
+
+    global emails_and_thresholds, timer_refresh, notify
 
     selected_item = products_tree.selection()[0]
     selected_name = products_tree.item(selected_item)["values"][0]
     selected_url = products[selected_name]["url"]
     emails_and_thresholds = products[selected_name]["emails_and_thresholds"]
     timer_refresh = products[selected_name]["timer_refresh"]
+    notify = tk.BooleanVar(value=products[selected_name]["notify"])
 
     # Crea la finestra di dialogo per modificare un prodotto
     edit_product_dialog = tk.Toplevel(root)
@@ -1064,11 +1057,16 @@ def open_edit_product_dialog():
     # Configura il widget Text per usare la scrollbar
     url_text.config(yscrollcommand=scrollbar.set)
 
+    ttk.Label(container, text="Notifiche:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
+
+    notify_checkbutton = ttk.Checkbutton(container, variable=notify)
+    notify_checkbutton.grid(row=2, column=1, padx=10, pady=10, sticky="we")
+
     # Bottone per aprire la finestra di dialogo avanzata
-    ttk.Button(container, text="Avanzate", command=open_advanced_dialog).grid(row=2, column=0, pady=10, sticky="w")
+    ttk.Button(container, text="Avanzate", command=open_advanced_dialog).grid(row=3, column=0, pady=10, sticky="w")
 
     # Bottone per salvare le modifiche
-    ttk.Button(container, text="Salva", command=lambda: on_edit_product(selected_name, selected_url, url_text.get("1.0", "end-1c").strip())).grid(row=2, column=1, pady=10, sticky="e")
+    ttk.Button(container, text="Salva", command=lambda: edit_product(selected_name, selected_url, url_text.get("1.0", "end-1c").strip())).grid(row=3, column=1, pady=10, sticky="e")
 
     edit_product_dialog.transient(root)
     edit_product_dialog.grab_set()
@@ -1121,7 +1119,7 @@ def remove_product():
             logger.warning(f"Il prodotto '{name}' non è presente nella lista")
 
 
-def notify(name, prev_price, curr_price):
+def send_notification_and_email(name, prev_price, curr_price):
     """
     Invia notifiche via email quando il prezzo di un prodotto cambia.
 
@@ -1195,7 +1193,7 @@ def update_selected_prices():
         previous_price = get_last_price(name)
 
         if previous_price is not None:
-            updated_products.append((name, previous_price, current_price))
+            updated_products.append((name, previous_price, current_price, products[name]["notify"]))
 
         # Salva i dati dei prezzi aggiornati
         save_prices_data(name, products[name]["price"])
@@ -1207,10 +1205,11 @@ def update_selected_prices():
     if updated_products:
         status_message = "Prezzi aggiornati per i seguenti prodotti:\n\n"
 
-        for name, prev_price, curr_price in updated_products:
+        for name, prev_price, curr_price, notify in updated_products:
             if curr_price < prev_price:
                 status_message += f"{name}: Prezzo calato da {prev_price}€ a {curr_price}€\n"
-                notify(name, prev_price, curr_price)
+                if notify:
+                    send_notification_and_email(name, prev_price, curr_price)
             elif curr_price > prev_price:
                 status_message += f"{name}: Prezzo aumentato da {prev_price}€ a {curr_price}€\n"
             else:
@@ -1254,7 +1253,7 @@ def update_all_prices():
         previous_price = get_last_price(name)
 
         if previous_price is not None:
-            updated_products.append((name, previous_price, current_price))
+            updated_products.append((name, previous_price, current_price, products[name]["notify"]))
 
         # Salva i dati dei prezzi aggiornati
         save_prices_data(name, products[name]["price"])
@@ -1266,10 +1265,11 @@ def update_all_prices():
     if updated_products:
         status_message = "Prezzi aggiornati per i seguenti prodotti:\n\n"
 
-        for name, prev_price, curr_price in updated_products:
+        for name, prev_price, curr_price, notify in updated_products:
             if curr_price < prev_price:
                 status_message += f"{name}: Prezzo calato da {prev_price}€ a {curr_price}€\n"
-                notify(name, prev_price, curr_price)
+                if notify:
+                    send_notification_and_email(name, prev_price, curr_price)
             elif curr_price > prev_price:
                 status_message += f"{name}: Prezzo aumentato da {prev_price}€ a {curr_price}€\n"
             else:
@@ -1393,6 +1393,7 @@ def sort_by_column(col_idx):
         'Nome': lambda item: item[0].lower(),
         'URL': lambda item: item[1]['url'].lower(),
         'Prezzo': lambda item: item[1]['price'] if isinstance(item[1]['price'], (int, float)) else float('inf'),
+        'Notifica': lambda item: item[1]['notify'],
         'Timer': lambda item: (item[1]['timer'] + item[1]['timer_refresh']) - time.time(),
         'Timer Aggiornamento [s]': lambda item: item[1]['timer_refresh'],
         'Data Inserimento': lambda item: item[1]['date_added'],
@@ -1714,12 +1715,13 @@ def periodic_update():
         for name in products_to_view:
             timer_text = calculate_time_remaining(products_to_view[name]["timer"], products_to_view[name]["timer_refresh"])
             products_tree.insert("", "end", iid=name, values=(
-                name, 
-                products_to_view[name]["url"], 
-                f"{str(products_to_view[name]['price'])}€", 
-                timer_text, 
-                products_to_view[name]["timer_refresh"], 
-                products_to_view[name]["date_added"], 
+                name,
+                products_to_view[name]["url"],
+                f"{str(products_to_view[name]['price'])}€",
+                "Si" if products_to_view[name]["notify"] else "No",
+                timer_text,
+                products_to_view[name]["timer_refresh"],
+                products_to_view[name]["date_added"],
                 products_to_view[name]["date_edited"]
             ))
 
@@ -1797,7 +1799,7 @@ def navigate_products(event):
 
 
 # Configurazioni
-columns = ("Nome", "URL", "Prezzo", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica")
+columns = ("Nome", "URL", "Prezzo", "Notifica", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica")
 
 products_file = "products.json"
 products = {}
@@ -1874,7 +1876,7 @@ products_tree = ttk.Treeview(frame_products_tree, columns=columns, show="heading
 # Configurazione delle colonne della TreeView
 for idx, col in enumerate(columns):
     products_tree.heading(col, text=col, anchor='center', command=lambda _idx=idx: sort_by_column(_idx))
-    products_tree.column(col, width=200, anchor='center' if col in ["Prezzo", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica"] else 'w')
+    products_tree.column(col, width=80 if col in ["Notifica"] else 200, anchor='center' if col in ["Prezzo", "Notifica", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica"] else 'w')
 products_tree.pack(fill="both", expand=True, padx=10, pady=10)
 
 # Scrollbar
