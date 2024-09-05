@@ -126,7 +126,7 @@ def reset_filters(reset_search_bar=True):
     Args:
         reset_search_bar (bool): Se True, svuota la barra di ricerca.
     """
-    global products_to_view, sort_state, products_tree, search_entry
+    global products_to_view, sort_state
 
     # Ripristina lo stato di ordinamento
     sort_state = {
@@ -231,8 +231,6 @@ def get_last_price(name):
         float: Ultimo prezzo registrato del prodotto se trovato.
         None: Se il prodotto non è presente nei dati dei prezzi.
     """
-    global prices
-
     # Verifica se il prodotto è presente nei dati dei prezzi
     if name in prices:
         # Trova l'ultima voce basata sulla data
@@ -308,16 +306,12 @@ def start_tracking(name, url):
             save_prices_data(name, products[name]["price"])
             save_data()
 
-        global products, stop_flags
-
         # Esegui il ciclo di monitoraggio finché non viene fermato
         while not stop_flags.get(name, False):
             time.sleep(products[name]["timer_refresh"])
             check_price_and_notify(name, url)
             products[name]["timer"] = time.time()
             reset_filters()
-
-    global stop_flags, threads
 
     # Inizializza i flag di stop e avvia il thread di monitoraggio
     stop_flags[name] = False
@@ -332,7 +326,7 @@ def load_data():
     """
     Carica i dati dei prodotti dal file JSON e avvia il monitoraggio per ogni prodotto.
     """
-    global products_file, products, products_to_view
+    global products, products_to_view
 
     # Verifica se il file dei dati dei prodotti esiste
     if os.path.exists(products_file):
@@ -373,7 +367,7 @@ def save_data():
     Salva i dati dei prodotti nel file JSON e aggiorna la vista dei prodotti.
     """
     try:
-        global products_file, products, products_to_view
+        global products_to_view
 
         # Salva i dati dei prodotti nel file JSON
         with open(products_file, "w") as file:
@@ -392,7 +386,7 @@ def load_prices_data():
     """
     Carica i dati di monitoraggio dei prezzi dal file JSON.
     """
-    global prices_file, prices
+    global prices
 
     # Verifica se il file dei dati di monitoraggio dei prezzi esiste
     if os.path.exists(prices_file):
@@ -425,8 +419,6 @@ def save_prices_data(name, price):
         name (str): Nome del prodotto.
         price (float): Prezzo aggiornato del prodotto.
     """
-    global prices_file, prices
-
     # Ottieni la data e l'ora corrente
     current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -498,8 +490,6 @@ def open_add_product_dialog():
         """
         Aggiorna la Listbox dei suggerimenti in base al testo digitato.
         """
-        global prices
-
         # Ottieni il testo digitato e rimuovi spazi bianchi
         typed_text = name_entry_var.get().strip().lower()
         listbox_suggestions.delete(0, tk.END)
@@ -546,8 +536,6 @@ def open_add_product_dialog():
             bool: True se il prodotto è stato aggiunto correttamente, False altrimenti.
         """
         def add_product(name, url):
-            global products
-
             if not name or not url:
                 messagebox.showwarning("Attenzione", "Compila tutti i campi!")
                 return False
@@ -720,7 +708,6 @@ def open_add_product_dialog():
 
         # Tabella per mostrare email e soglie aggiunte
         columns = ("Email", "Soglia")
-        global table
         table = ttk.Treeview(container, columns=columns, show="headings")
         table.grid(row=3, column=0, columnspan=2, pady=10, sticky="nsew")
         table.heading("Email", text="Email")
@@ -758,9 +745,8 @@ def open_add_product_dialog():
         advanced_dialog.grab_set()
         center_window(advanced_dialog)
 
-    global root, common_font, limit_letters, emails_and_thresholds, timer_refresh
+    global emails_and_thresholds, timer_refresh
 
-    # Inizializza le variabili globali
     emails_and_thresholds = {}
     timer_refresh = 1800
 
@@ -835,8 +821,6 @@ def open_edit_product_dialog():
             bool: True se il prodotto è stato modificato correttamente, False altrimenti.
         """
         def edit_product(name, current_url, new_url):
-            global products
-
             if not new_url:
                 messagebox.showwarning("Attenzione", "Compila l'URL!")
                 return False
@@ -1002,7 +986,6 @@ def open_edit_product_dialog():
 
         # Tabella per mostrare email e soglie aggiunte
         columns = ("Email", "Soglia")
-        global table
         table = ttk.Treeview(container, columns=columns, show="headings")
         table.grid(row=3, column=0, columnspan=2, pady=10, sticky="nsew")
         table.heading("Email", text="Email")
@@ -1037,7 +1020,7 @@ def open_edit_product_dialog():
         advanced_dialog.grab_set()
         center_window(advanced_dialog)
 
-    global root, common_font, products_tree, emails_and_thresholds, timer_refresh
+    global emails_and_thresholds, timer_refresh
 
     selected_item = products_tree.selection()[0]
     selected_name = products_tree.item(selected_item)["values"][0]
@@ -1103,8 +1086,6 @@ def remove_product():
         Args:
             name (str): Nome del prodotto da fermare.
         """
-        global stop_flags, threads
-
         stop_flags[name] = True
 
         if name in threads:
@@ -1112,8 +1093,6 @@ def remove_product():
             del threads[name]
 
         del stop_flags[name]
-
-    global products, products_tree
 
     # Resetta i filtri per riflettere la rimozione del prodotto
     reset_filters()
@@ -1151,8 +1130,6 @@ def notify(name, prev_price, curr_price):
         prev_price (float): Prezzo precedente del prodotto.
         curr_price (float): Prezzo corrente del prodotto.
     """
-    global products
-
     # Definisce l'oggetto e il corpo della notifica principale
     subject = "Prezzo in calo!"
     body = f"Il prezzo dell'articolo '{name}' è sceso da {prev_price}€ a {curr_price}€.\nAcquista ora: {products[name]['url']}"
@@ -1183,8 +1160,6 @@ def update_selected_prices():
     """
     Aggiorna i prezzi dei prodotti selezionati e notifica eventuali cambiamenti.
     """
-    global products, products_tree
-
     # Resetta i filtri (se presenti)
     reset_filters()
 
@@ -1252,8 +1227,6 @@ def update_all_prices():
     """
     Aggiorna i prezzi di tutti i prodotti e notifica eventuali cambiamenti.
     """
-    global products
-
     # Resetta i filtri (se presenti)
     reset_filters()
 
@@ -1326,8 +1299,6 @@ def view_graph_for_product(product_name):
         Returns:
             fig (plotly.graph_objects.Figure): Il grafico creato.
         """
-        global prices
-
         # Verifica se il prodotto esiste nei dati
         if product_name not in prices:
             raise ValueError(f"Prodotto '{product_name}' non trovato in prices")
@@ -1359,7 +1330,7 @@ def view_graph_for_product(product_name):
         
         return fig
 
-    global panel_prices, products_tree
+    global panel_prices
 
     # Crea una nuova applicazione PyQt5 solo se non esiste già
     if panel_prices is None:
@@ -1409,7 +1380,7 @@ def sort_by_column(col_idx):
     Args:
         col_idx (int): L'indice della colonna su cui ordinare.
     """
-    global products_to_view, sort_state, columns, products_tree
+    global products_to_view
 
     # Ottieni gli elementi della vista dei prodotti come una lista di tuple
     items = list(products_to_view.items())
@@ -1485,7 +1456,7 @@ def update_products_to_view():
         }
         return filtered_products
 
-    global products, products_to_view
+    global products_to_view
 
     # Resetta i filtri senza resettare la barra di ricerca
     reset_filters(reset_search_bar=False)
@@ -1531,8 +1502,6 @@ def show_product_details():
         else:
             return "Prezzo nella media, considera se hai bisogno del prodotto ora 😕", "#FFA500"
     
-    global products_tree, products, prices, common_font, root
-
     selected = products_tree.selection()
 
     if not selected:
@@ -1628,8 +1597,6 @@ def show_context_menu(event):
     Args:
         event (tk.Event): Evento del mouse che contiene informazioni sul clic.
     """
-    global products_tree, context_root_menu, multi_selection_menu
-
     # Ottieni le coordinate del click
     x, y = event.x, event.y
     
@@ -1653,7 +1620,6 @@ def show_context_menu(event):
         context_root_menu.post(event.x_root, event.y_root)
 
 
-
 def on_item_click_to_view(event):
     """
     Gestisce il clic su un elemento nella TreeView per visualizzarne i dettagli.
@@ -1662,10 +1628,9 @@ def on_item_click_to_view(event):
     Args:
         event (tk.Event): Evento del mouse che contiene informazioni sul clic.
     """
-    global products_tree
-
     if len(products_tree.selection()) == 1:
         show_product_details()
+
 
 def update_buttons_state(event=None):
     """
@@ -1676,8 +1641,6 @@ def update_buttons_state(event=None):
     Args:
         event (tk.Event, opzionale): Evento del mouse o della tastiera che può scatenare l'aggiornamento.
     """
-    global products_to_view, products_tree
-
     selected_items = products_tree.selection()
     num_selected = len(selected_items)
 
@@ -1708,6 +1671,7 @@ def update_buttons_state(event=None):
 
         add_button["state"] = "normal"
         update_all_button["state"] = "normal" if products_to_view else "disabled"
+
 
 def periodic_update():
     """
@@ -1740,8 +1704,6 @@ def periodic_update():
             minutes, seconds = divmod(remainder, 60)
 
             return f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-
-        global products_to_view, products_tree
         
         # Salva la selezione corrente
         selection = products_tree.selection()
@@ -1766,8 +1728,6 @@ def periodic_update():
             if item_id in products_tree.get_children():
                 products_tree.selection_add(item_id)
 
-    global root
-
     refresh_treeview()
     update_buttons_state()
 
@@ -1782,10 +1742,9 @@ def select_all(event=None):
     Args:
         event (tk.Event, opzionale): Evento che può scatenare la selezione. Non utilizzato in questa funzione.
     """
-    global products_tree
-
     # Seleziona tutti i figli della TreeView
     products_tree.selection_set(products_tree.get_children())
+
 
 def clear_selection(event=None):
     """
@@ -1795,8 +1754,6 @@ def clear_selection(event=None):
     Args:
         event (tk.Event, opzionale): Evento del mouse che può indicare la posizione del clic.
     """
-    global products_tree
-
     # Identifica la riga sotto il puntatore del mouse
     row_id = products_tree.identify_row(event.y)
     
@@ -1808,6 +1765,7 @@ def clear_selection(event=None):
         if event.widget == products_tree:
             products_tree.selection_remove(*products_tree.selection())
 
+
 def navigate_products(event):
     """
     Naviga tra gli elementi della TreeView usando le frecce su e giù.
@@ -1816,8 +1774,6 @@ def navigate_products(event):
     Args:
         event (tk.Event): Evento della tastiera che indica quale tasto è stato premuto.
     """
-    global products_tree
-
     selected_item = products_tree.selection()
     if not selected_item:
         return  # Nessun elemento selezionato
