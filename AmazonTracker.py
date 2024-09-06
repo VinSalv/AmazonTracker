@@ -307,6 +307,7 @@ def start_tracking(name, url):
             products[name]["price"] = current_price
             save_prices_data(name, products[name]["price"])
             save_data()
+            
         # Esegui il ciclo di monitoraggio finché non viene fermato
         while not stop_flags.get(name, False):
             time.sleep(products[name]["timer_refresh"])
