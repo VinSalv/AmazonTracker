@@ -272,11 +272,6 @@ def start_tracking(name, url):
                 logger.warning(f"Non trovato il prezzo di {name} sulla pagina {url}")
                 return
             
-            # Aggiorna il prezzo del prodotto e salva i dati
-            products[name]["price"] = current_price
-            save_prices_data(name, products[name]["price"])
-            save_data()
-            
             if products[name]["notify"]:
                 # Ottieni il prezzo precedente
                 previous_price = get_last_price(name)
@@ -308,6 +303,10 @@ def start_tracking(name, url):
                     if current_price < value_to_compare:
                         send_email(subject=subject_to_send, body=body_to_send, email_to_notify=key)
 
+            # Aggiorna il prezzo del prodotto e salva i dati
+            products[name]["price"] = current_price
+            save_prices_data(name, products[name]["price"])
+            save_data()
         # Esegui il ciclo di monitoraggio finché non viene fermato
         while not stop_flags.get(name, False):
             time.sleep(products[name]["timer_refresh"])
