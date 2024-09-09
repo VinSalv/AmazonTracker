@@ -119,6 +119,34 @@ def send_notification(subject, body):
         logger.error(f"Impossibile inviare il messaggio Telegram: {e}")
 
 
+def calculating_suggestion(all_prices, current_price, price_average, price_minimum, price_maximum):
+        """
+        Calcola un suggerimento basato sui prezzi storici e sul prezzo corrente.
+
+        Args:
+            all_prices (list): Lista di prezzi storici del prodotto.
+            current_price (float): Prezzo corrente del prodotto.
+            price_average (float): Prezzo medio storico.
+            price_minimum (float): Prezzo minimo storico.
+            price_maximum (float): Prezzo massimo storico.
+
+        Returns:
+            tuple: Un suggerimento testuale e un colore associato.
+        """
+        if not isinstance(current_price, (int, float)):
+            return "Prezzo attuale inesistente: aggiorna il prodotto o cambia il suo url", "black"
+        elif all(x == all_prices[0] for x in all_prices):
+            return "Ad oggi non sono state rilevate variazioni di prezzo", "blue"
+        elif current_price <= price_minimum:
+            return "Ottimo momento per comprare!", "green"
+        elif current_price < price_average * 0.9:
+            return "Prezzo inferiore alla media, buon momento per comprare", "green"
+        elif current_price >= price_maximum:
+            return "Prezzo alto rispetto alla storia, considera di aspettare una riduzione", "red"
+        else:
+            return "Prezzo nella media, considera se hai bisogno del prodotto ora", "#FFA500"
+
+
 def reset_filters(reset_search_bar=True):
     """
     Ripristina i filtri dei prodotti e riordina l'elenco dei prodotti visualizzati.
@@ -244,8 +272,8 @@ def get_last_price(name):
 
 def start_tracking(name, url):
     """
-    Avvia il monitoraggio del prezzo per un dato prodotto.
-
+    Avvia o riavvia il monitoraggio del prezzo per un dato prodotto.
+    
     Args:
         name (str): Nome del prodotto da monitorare.
         url (str): URL della pagina del prodotto.
@@ -266,6 +294,7 @@ def start_tracking(name, url):
                 name (str): Nome del prodotto.
                 url (str): URL della pagina del prodotto.
             """
+            # Ottieni il prezzo attuale
             current_price = get_price(url)
 
             if current_price is None:
@@ -276,8 +305,23 @@ def start_tracking(name, url):
                 # Ottieni il prezzo precedente
                 previous_price = get_last_price(name)
 
+                # Ottieni i prezzi storici
+                historical_prices = prices.get(name, [])
+                
+                # Calcoli sui prezzi storici
+                all_prices = [entry["price"] for entry in historical_prices if isinstance(entry["price"], (int, float))]
+                if all_prices:
+                    average_price = round(statistics.mean(all_prices), 2)
+                    price_minimum = min(all_prices)
+                    price_maximum = max(all_prices)
+                else:
+                    average_price = price_minimum = price_maximum = current_price
+
+                text_suggestion, _ = calculating_suggestion(all_prices, current_price, average_price, price_minimum, price_maximum)
+
                 subject = "Prezzo in calo!"
-                body = (f"Il prezzo dell'articolo {name} è sceso da {previous_price}€ a {current_price}€\n"
+                body = (f"Il prezzo dell'articolo '{name}' è sceso da {previous_price}€ a {current_price}€.\n\n" +
+                        f"Dettagli:\n\t- Prezzo medio: {average_price}€\n\t- Prezzo minimo storico: {price_minimum}€\n\t- Prezzo massimo storico: {price_maximum}€\n\n{text_suggestion}\n\n" +
                         f"Acquista ora: {products[name]['url']}")
                 
                 if previous_price is None:
@@ -297,8 +341,10 @@ def start_tracking(name, url):
                     if value != 0.0:
                         value_to_compare = value
                         subject_to_send = "Prezzo inferiore alla soglia indicata!"
-                        body_to_send = (f"Il prezzo dell'articolo {name} è al di sotto della soglia di {value_to_compare}€ indicata.\n"
-                                        f"Il costo è {current_price}€\nAcquista ora: {products[name]['url']}")
+                        body_to_send = (f"Il prezzo dell'articolo '{name}' è al di sotto della soglia di {value_to_compare}€ indicata.\n" +
+                                        f"Il costo attuale è {current_price}€.\n\n" +
+                                        f"Dettagli:\n\t- Prezzo medio: {average_price}€\n\t- Prezzo minimo storico: {price_minimum}€\n\t- Prezzo massimo storico: {price_maximum}€\n\n{text_suggestion}\n\n" +
+                                        f"Acquista ora: {products[name]['url']}")
                     
                     if current_price < value_to_compare:
                         send_email(subject=subject_to_send, body=body_to_send, email_to_notify=key)
@@ -308,20 +354,33 @@ def start_tracking(name, url):
             save_prices_data(name, products[name]["price"])
             save_data()
             
-        # Esegui il ciclo di monitoraggio finché non viene fermato
-        while not stop_flags.get(name, False):
-            time.sleep(products[name]["timer_refresh"])
+        # Ciclo di monitoraggio
+        while not stop_events[name].is_set():  # Continua finché l'evento non è settato
+            if stop_events[name].wait(products[name]["timer_refresh"]):
+                break  # Esce immediatamente se l'evento è settato durante il wait
+            print("ciao")
             check_price_and_notify(name, url)
             products[name]["timer"] = time.time()
             reset_filters()
 
-    # Inizializza i flag di stop e avvia il thread di monitoraggio
-    stop_flags[name] = False
+        logger.info(f"Monitoraggio di '{name}' fermato")
+        threads.pop(name, None)
+
+    global threads, stop_events  # Dichiarazione delle variabili globali
+
+    # Se c'è già un thread attivo, fermalo prima di avviarne uno nuovo
+    if name in threads and threads[name].is_alive():
+        logger.info(f"Fermando il monitoraggio precedente di '{name}'...")
+        stop_events[name].set()  # Segnala al thread corrente di fermarsi
+        threads[name].join(timeout=1)  # Aspetta che il thread corrente termini
+
+    # Crea un nuovo evento di stop e avvia un nuovo thread
+    stop_events[name] = threading.Event()  # Crea un nuovo evento per il nuovo thread
     timer_thread = threading.Thread(target=track_loop, args=(name, url,), daemon=True)
     threads[name] = timer_thread
     timer_thread.start()
 
-    logger.info(f"Avviato il monitoraggio per '{name}' ({url})")
+    logger.info(f"Avviato il monitoraggio per '{name}' ({url}) con un nuovo timer")
 
 
 def load_data():
@@ -734,9 +793,13 @@ def open_add_product_dialog():
         }
         
         save_data()
-        save_prices_data(name, products[name]["price"]) 
+        save_prices_data(name, products[name]["price"])
+
         start_tracking(name, url)
+
         reset_filters()
+
+        logger.info(f"Prodotto '{name}' aggiunto con successo")
     
         add_product_dialog.destroy()
 
@@ -1006,6 +1069,8 @@ def open_edit_product_dialog():
         save_data()
         save_prices_data(name, products[name]["price"])
 
+        start_tracking(name, new_url)
+
         reset_filters()
 
         logger.info(f"Prodotto '{name}' modificato con successo")
@@ -1077,6 +1142,8 @@ def remove_product():
     """
     Rimuove i prodotti selezionati dalla lista e ferma il monitoraggio.
     """
+    global stop_events, threads  # Dichiarazione delle variabili globali
+
     def stop_tracking(name):
         """
         Ferma il monitoraggio per un prodotto specificato e rimuove il relativo thread.
@@ -1084,13 +1151,15 @@ def remove_product():
         Args:
             name (str): Nome del prodotto da fermare.
         """
-        stop_flags[name] = True
+        if name in stop_events:
+            stop_events[name].set()  # Setta l'evento di stop per fermare il monitoraggio
 
         if name in threads:
-            threads[name].join(timeout=1)
-            del threads[name]
+            threads[name].join(timeout=1)  # Attende la terminazione del thread
 
-        del stop_flags[name]
+        # Rimuove l'evento di stop per questo prodotto
+        if name in stop_events:
+            del stop_events[name]
 
     # Resetta i filtri per riflettere la rimozione del prodotto
     reset_filters()
@@ -1119,6 +1188,7 @@ def remove_product():
             logger.warning(f"Il prodotto '{name}' non è presente nella lista")
 
 
+
 def send_notification_and_email(name, prev_price, curr_price):
     """
     Invia notifiche via email quando il prezzo di un prodotto cambia.
@@ -1129,8 +1199,23 @@ def send_notification_and_email(name, prev_price, curr_price):
         curr_price (float): Prezzo corrente del prodotto.
     """
     # Definisce l'oggetto e il corpo della notifica principale
+    historical_prices = prices.get(name, [])
+    
+    # Calcoli sui prezzi storici
+    all_prices = [entry["price"] for entry in historical_prices if isinstance(entry["price"], (int, float))]
+    if all_prices:
+        average_price = round(statistics.mean(all_prices), 2)
+        price_minimum = min(all_prices)
+        price_maximum = max(all_prices)
+    else:
+        average_price = price_minimum = price_maximum = curr_price
+
+    text_suggestion, _ = calculating_suggestion(all_prices, curr_price, average_price, price_minimum, price_maximum)
+
     subject = "Prezzo in calo!"
-    body = f"Il prezzo dell'articolo '{name}' è sceso da {prev_price}€ a {curr_price}€.\nAcquista ora: {products[name]['url']}"
+    body = (f"Il prezzo dell'articolo '{name}' è sceso da {prev_price}€ a {curr_price}€.\n\n" +
+            f"Dettagli:\n\t- Prezzo medio: {average_price}€\n\t- Prezzo minimo storico: {price_minimum}€\n\t- Prezzo massimo storico: {price_maximum}€\n\n{text_suggestion}\n\n" +
+            f"Acquista ora: {products[name]['url']}")
 
     # Invia la notifica principale
     send_notification(subject=subject, body=body)
@@ -1146,8 +1231,10 @@ def send_notification_and_email(name, prev_price, curr_price):
         if threshold != 0.0:
             value_to_compare = threshold
             subject_to_send = "Prezzo inferiore alla soglia indicata!"
-            body_to_send = (f"Il prezzo dell'articolo '{name}' è al di sotto della soglia di {value_to_compare}€ indicata.\n"
-                            f"Il costo attuale è {curr_price}€.\nAcquista ora: {products[name]['url']}")
+            body_to_send = (f"Il prezzo dell'articolo '{name}' è al di sotto della soglia di {value_to_compare}€ indicata.\n" +
+                            f"Il costo attuale è {curr_price}€.\n\n" +
+                            f"Dettagli:\n\t- Prezzo medio: {average_price}€\n\t- Prezzo minimo storico: {price_minimum}€\n\t- Prezzo massimo storico: {price_maximum}€\n\n{text_suggestion}\n\n" +
+                            f"Acquista ora: {products[name]['url']}")
 
         # Invia una notifica via email se il prezzo corrente è inferiore al valore di confronto
         if curr_price < value_to_compare:
@@ -1477,32 +1564,7 @@ def show_product_details():
     """
     Mostra una finestra con i dettagli del prodotto selezionato, inclusi prezzo attuale,
     prezzi storici e suggerimenti basati sul prezzo.
-    """
-    def calculating_suggestion(all_prices, current_price, price_average, price_minimum, price_maximum):
-        """
-        Calcola un suggerimento basato sui prezzi storici e sul prezzo corrente.
-
-        Args:
-            all_prices (list): Lista di prezzi storici del prodotto.
-            current_price (float): Prezzo corrente del prodotto.
-            price_average (float): Prezzo medio storico.
-            price_minimum (float): Prezzo minimo storico.
-            price_maximum (float): Prezzo massimo storico.
-
-        Returns:
-            tuple: Un suggerimento testuale e un colore associato.
-        """
-        if all(x == all_prices[0] for x in all_prices):
-            return "Ad oggi non sono state rilevate variazioni di prezzo 😐", "blue"
-        elif current_price <= price_minimum:
-            return "Ottimo momento per comprare! 🤩", "green"
-        elif current_price < price_average * 0.9:
-            return "Prezzo inferiore alla media, buon momento per comprare 😊", "green"
-        elif current_price >= price_maximum:
-            return "Prezzo alto rispetto alla storia, considera di aspettare una riduzione 😔", "red"
-        else:
-            return "Prezzo nella media, considera se hai bisogno del prodotto ora 😕", "#FFA500"
-    
+    """    
     selected = products_tree.selection()
 
     if not selected:
@@ -1513,7 +1575,7 @@ def show_product_details():
 
     # Estrazione dei dati
     url = products[product_name]["url"]
-    current_price = get_last_price(product_name)
+    current_price = products[product_name]["price"]
     historical_prices = prices.get(product_name, [])
     
     # Calcoli sui prezzi storici
@@ -1569,7 +1631,7 @@ def show_product_details():
     prices_frame.pack(anchor="w", padx=10)
 
     # Prezzo corrente
-    current_price_label = ttk.Label(prices_frame, text=f"Prezzo Attuale: {current_price:.2f}€", font=highlight_font, foreground=color_suggestion)
+    current_price_label = ttk.Label(prices_frame, text=f"Prezzo Attuale: {current_price:.2f}€" if isinstance(current_price, (int, float)) else "Prezzo Attuale: -", font=highlight_font, foreground=color_suggestion)
     current_price_label.grid(row=0, column=0, sticky='w', pady=(5, 10))
 
     # Prezzi storici
@@ -1810,7 +1872,7 @@ prices = {}
 panel_prices = None
 
 threads = {}
-stop_flags = {}
+stop_events = {}
 
 sort_state = {
     'column': None,
