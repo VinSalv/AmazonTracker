@@ -51,9 +51,9 @@ def load_config():
             with open(config_file, "r") as file:
                 # Carica le impostazioni dal file JSON
                 config = json.load(file)
-                return (config["sender_email"], config["sender_password"],
-                        config["receiver_email"], config["url_telegram"], 
-                        config["chat_id_telegram"])
+                return (config['sender_email'], config['sender_password'],
+                        config['receiver_email'], config['url_telegram'], 
+                        config['chat_id_telegram'])
         
         except Exception as e:
             logger.error(f"Errore nel caricamento del file di configurazione: {e}")
@@ -78,9 +78,9 @@ def send_email(subject, body, email_to_notify):
 
     # Crea il messaggio email
     msg = MIMEMultipart()
-    msg["From"] = from_email
-    msg["To"] = email_to_notify
-    msg["Subject"] = subject
+    msg['From'] = from_email
+    msg['To'] = email_to_notify
+    msg['Subject'] = subject
     msg.attach(MIMEText(body, "plain"))
 
     try:
@@ -176,7 +176,7 @@ def reset_filters(reset_search_bar=True):
 
     # Ordina gli elementi in base alla data dell'ultima modifica
     items = list(products_to_view.items())
-    items.sort(key=column_key_map["Data Ultima Modifica"])
+    items.sort(key=column_key_map['Data Ultima Modifica'])
 
     # Aggiorna il dizionario dei prodotti da visualizzare
     products_to_view = {name: details for name, details in items}
@@ -263,9 +263,9 @@ def get_last_price(name):
     # Verifica se il prodotto è presente nei dati dei prezzi
     if name in prices:
         # Trova l'ultima voce basata sulla data
-        last_entry = max(prices[name], key=lambda x: x["date"])
+        last_entry = max(prices[name], key=lambda x: x['date'])
 
-        return last_entry["price"]
+        return last_entry['price']
     else:
         return None
 
@@ -301,7 +301,7 @@ def start_tracking(name, url):
                 logger.warning(f"Non trovato il prezzo di {name} sulla pagina {url}")
                 return
             
-            if products[name]["notify"]:
+            if products[name]['notify']:
                 # Ottieni il prezzo precedente
                 previous_price = get_last_price(name)
 
@@ -309,7 +309,7 @@ def start_tracking(name, url):
                 historical_prices = prices.get(name, [])
                 
                 # Calcoli sui prezzi storici
-                all_prices = [entry["price"] for entry in historical_prices if isinstance(entry["price"], (int, float))]
+                all_prices = [entry['price'] for entry in historical_prices if isinstance(entry['price'], (int, float))]
                 if all_prices:
                     average_price = round(statistics.mean(all_prices), 2)
                     price_minimum = min(all_prices)
@@ -333,7 +333,7 @@ def start_tracking(name, url):
                     send_notification(subject=subject, body=body)
                 
                 # Controlla se il prezzo è al di sotto delle soglie specificate e invia email
-                for key, value in products[name]["emails_and_thresholds"].items():
+                for key, value in products[name]['emails_and_thresholds'].items():
                     value_to_compare = previous_price
                     subject_to_send = subject
                     body_to_send = body
@@ -350,17 +350,16 @@ def start_tracking(name, url):
                         send_email(subject=subject_to_send, body=body_to_send, email_to_notify=key)
 
             # Aggiorna il prezzo del prodotto e salva i dati
-            products[name]["price"] = current_price
-            save_prices_data(name, products[name]["price"])
+            products[name]['price'] = current_price
+            save_prices_data(name, products[name]['price'])
             save_data()
             
         # Ciclo di monitoraggio
         while not stop_events[name].is_set():  # Continua finché l'evento non è settato
-            if stop_events[name].wait(products[name]["timer_refresh"]):
+            if stop_events[name].wait(products[name]['timer_refresh']):
                 break  # Esce immediatamente se l'evento è settato durante il wait
-            print("ciao")
             check_price_and_notify(name, url)
-            products[name]["timer"] = time.time()
+            products[name]['timer'] = time.time()
             reset_filters()
 
         logger.info(f"Monitoraggio di '{name}' fermato")
@@ -769,7 +768,7 @@ def open_add_product_dialog():
                 messagebox.showwarning("Attenzione", "Il nome del prodotto è già presente!\nCambia il nome")
                 return False
 
-            if url == products[product_name]["url"]:
+            if url == products[product_name]['url']:
                 messagebox.showwarning("Attenzione", "Questo articolo è già in monitoraggio!\nCambia url")
                 return False
 
@@ -793,7 +792,7 @@ def open_add_product_dialog():
         }
         
         save_data()
-        save_prices_data(name, products[name]["price"])
+        save_prices_data(name, products[name]['price'])
 
         start_tracking(name, url)
 
@@ -1046,28 +1045,28 @@ def open_edit_product_dialog():
 
         if current_url != new_url:
             for product_name in products:
-                if new_url == products[product_name]["url"]:
+                if new_url == products[product_name]['url']:
                     messagebox.showwarning("Attenzione", "Questo articolo è già in monitoraggio!\nCambia l'URL")
                     return False
 
         new_price = get_price(new_url)
 
         if new_price is None:                
-            products[name]["price"] = "Aggiorna o verifica l'URL: - "
+            products[name]['price'] = "Aggiorna o verifica l'URL: - "
             messagebox.showwarning("Attenzione", "Non è stato trovato il prezzo sulla pagina!\nAggiorna o verifica l'URL")
-            logger.warning(f"Sul prodotto {name} non è stato trovato il prezzo sulla pagina " + products[name]["url"])
+            logger.warning(f"Sul prodotto {name} non è stato trovato il prezzo sulla pagina " + products[name]['url'])
         else:
-            products[name]["price"] = new_price
+            products[name]['price'] = new_price
 
-        products[name]["url"] = new_url
-        products[name]["notify"] = notify.get()
-        products[name]["timer"] = time.time()
-        products[name]["timer_refresh"] = timer_refresh
-        products[name]["date_edited"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        products[name]["emails_and_thresholds"] = emails_and_thresholds
+        products[name]['url'] = new_url
+        products[name]['notify'] = notify.get()
+        products[name]['timer'] = time.time()
+        products[name]['timer_refresh'] = timer_refresh
+        products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        products[name]['emails_and_thresholds'] = emails_and_thresholds
 
         save_data()
-        save_prices_data(name, products[name]["price"])
+        save_prices_data(name, products[name]['price'])
 
         start_tracking(name, new_url)
 
@@ -1080,11 +1079,11 @@ def open_edit_product_dialog():
     global emails_and_thresholds, timer_refresh, notify
 
     selected_item = products_tree.selection()[0]
-    selected_name = products_tree.item(selected_item)["values"][0]
-    selected_url = products[selected_name]["url"]
-    emails_and_thresholds = products[selected_name]["emails_and_thresholds"]
-    timer_refresh = products[selected_name]["timer_refresh"]
-    notify = tk.BooleanVar(value=products[selected_name]["notify"])
+    selected_name = products_tree.item(selected_item)['values'][0]
+    selected_url = products[selected_name]['url']
+    emails_and_thresholds = products[selected_name]['emails_and_thresholds']
+    timer_refresh = products[selected_name]['timer_refresh']
+    notify = tk.BooleanVar(value=products[selected_name]['notify'])
 
     # Crea la finestra di dialogo per modificare un prodotto
     edit_product_dialog = tk.Toplevel(root)
@@ -1188,7 +1187,6 @@ def remove_product():
             logger.warning(f"Il prodotto '{name}' non è presente nella lista")
 
 
-
 def send_notification_and_email(name, prev_price, curr_price):
     """
     Invia notifiche via email quando il prezzo di un prodotto cambia.
@@ -1202,7 +1200,7 @@ def send_notification_and_email(name, prev_price, curr_price):
     historical_prices = prices.get(name, [])
     
     # Calcoli sui prezzi storici
-    all_prices = [entry["price"] for entry in historical_prices if isinstance(entry["price"], (int, float))]
+    all_prices = [entry['price'] for entry in historical_prices if isinstance(entry['price'], (int, float))]
     if all_prices:
         average_price = round(statistics.mean(all_prices), 2)
         price_minimum = min(all_prices)
@@ -1221,7 +1219,7 @@ def send_notification_and_email(name, prev_price, curr_price):
     send_notification(subject=subject, body=body)
 
     # Controlla e invia notifiche per email agli utenti
-    for email, threshold in products[name]["emails_and_thresholds"].items():
+    for email, threshold in products[name]['emails_and_thresholds'].items():
         # Imposta il valore di confronto e il messaggio da inviare
         value_to_compare = prev_price
         subject_to_send = subject
@@ -1260,30 +1258,30 @@ def update_selected_prices():
     # Itera sui prodotti selezionati per aggiornare i prezzi
     for item in selected:
         name = item
-        current_price = get_price(products[name]["url"])
+        current_price = get_price(products[name]['url'])
 
         if current_price is None:
             logger.warning(f"Prodotto '{name}' non aggiornato: non trovato il prezzo sulla pagina {products[name]['url']}")
             
             # Aggiorna il prodotto con un messaggio di errore
-            products[name]["price"] = "Aggiorna o verifica url: - "
-            products[name]["timer"] = time.time()
-            products[name]["date_edited"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            products[name]['price'] = "Aggiorna o verifica url: - "
+            products[name]['timer'] = time.time()
+            products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             continue
 
         # Aggiorna il prezzo del prodotto
-        products[name]["price"] = current_price
-        products[name]["timer"] = time.time()
-        products[name]["date_edited"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        products[name]['price'] = current_price
+        products[name]['timer'] = time.time()
+        products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         # Ottieni il prezzo precedente del prodotto
         previous_price = get_last_price(name)
 
         if previous_price is not None:
-            updated_products.append((name, previous_price, current_price, products[name]["notify"]))
+            updated_products.append((name, previous_price, current_price, products[name]['notify']))
 
         # Salva i dati dei prezzi aggiornati
-        save_prices_data(name, products[name]["price"])
+        save_prices_data(name, products[name]['price'])
 
     # Salva tutti i dati dei prodotti aggiornati
     save_data()
@@ -1320,30 +1318,30 @@ def update_all_prices():
 
     # Itera su tutti i prodotti per aggiornare i prezzi
     for name in products:
-        current_price = get_price(products[name]["url"])
+        current_price = get_price(products[name]['url'])
 
         if current_price is None:
             logger.warning(f"Prodotto '{name}' non aggiornato: non trovato il prezzo sulla pagina {products[name]['url']}")
             
             # Aggiorna il prodotto con un messaggio di errore
-            products[name]["price"] = "Aggiorna o verifica url: - "
-            products[name]["timer"] = time.time()
-            products[name]["date_edited"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            products[name]['price'] = "Aggiorna o verifica url: - "
+            products[name]['timer'] = time.time()
+            products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             continue
 
         # Aggiorna il prezzo del prodotto
-        products[name]["price"] = current_price
-        products[name]["timer"] = time.time()
-        products[name]["date_edited"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        products[name]['price'] = current_price
+        products[name]['timer'] = time.time()
+        products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         # Ottieni il prezzo precedente del prodotto
         previous_price = get_last_price(name)
 
         if previous_price is not None:
-            updated_products.append((name, previous_price, current_price, products[name]["notify"]))
+            updated_products.append((name, previous_price, current_price, products[name]['notify']))
 
         # Salva i dati dei prezzi aggiornati
-        save_prices_data(name, products[name]["price"])
+        save_prices_data(name, products[name]['price'])
 
     # Salva tutti i dati dei prodotti aggiornati
     save_data()
@@ -1499,7 +1497,7 @@ def sort_by_column(col_idx):
     # Ordina gli elementi in base alla colonna selezionata e all'ordine
     if sort_state['order'] == 0:
         # Ripristina l'ordine iniziale
-        items.sort(key=column_key_map["Data Ultima Modifica"])
+        items.sort(key=column_key_map['Data Ultima Modifica'])
         sort_state['column'] = None
     elif sort_state['order'] == 1:
         # Ordina in ordine crescente
@@ -1560,10 +1558,13 @@ def update_products_to_view():
         products_to_view = products
 
 
-def show_product_details():
+def show_product_details(event=None):
     """
     Mostra una finestra con i dettagli del prodotto selezionato, inclusi prezzo attuale,
     prezzi storici e suggerimenti basati sul prezzo.
+
+    Args:
+        event (tk.Event, opzionale): Evento che può scatenare la selezione. Non utilizzato in questa funzione.
     """    
     selected = products_tree.selection()
 
@@ -1571,15 +1572,19 @@ def show_product_details():
         logger.warning("Nessun prodotto selezionato per visualizzare i dettagli")
         return
     
+    if len(products_tree.selection()) > 1:
+        logger.warning("Più di un prodotto selezionato per visualizzare i dettagli")
+        return
+    
     product_name = selected[0]
 
     # Estrazione dei dati
-    url = products[product_name]["url"]
-    current_price = products[product_name]["price"]
+    url = products[product_name]['url']
+    current_price = products[product_name]['price']
     historical_prices = prices.get(product_name, [])
     
     # Calcoli sui prezzi storici
-    all_prices = [entry["price"] for entry in historical_prices if isinstance(entry["price"], (int, float))]
+    all_prices = [entry['price'] for entry in historical_prices if isinstance(entry['price'], (int, float))]
     if all_prices:
         average_price = round(statistics.mean(all_prices), 2)
         price_minimum = min(all_prices)
@@ -1592,6 +1597,7 @@ def show_product_details():
     # Creazione della finestra dei dettagli
     details_window = tk.Toplevel(root)
     details_window.title(f"Dettagli del prodotto: {product_name}")
+    details_window.minsize(500, 300)
     details_window.configure(padx=20, pady=10)  # Padding per la finestra
     details_window.transient(root)
     details_window.grab_set()
@@ -1636,13 +1642,13 @@ def show_product_details():
 
     # Prezzi storici
     ttk.Label(prices_frame, text="Prezzo Medio:", font=common_font).grid(row=1, column=0, sticky='w', pady=5)
-    ttk.Label(prices_frame, text=f"{average_price:.2f}€", font=common_font).grid(row=1, column=1, sticky='e', pady=5)
+    ttk.Label(prices_frame, text=f"{average_price:.2f}€" if isinstance(average_price, (int, float)) else "-", font=common_font).grid(row=1, column=1, sticky='e', pady=5)
 
     ttk.Label(prices_frame, text="Prezzo Minimo Storico:", font=common_font).grid(row=2, column=0, sticky='w', pady=5)
-    ttk.Label(prices_frame, text=f"{price_minimum:.2f}€", font=common_font).grid(row=2, column=1, sticky='e', pady=5)
+    ttk.Label(prices_frame, text=f"{price_minimum:.2f}€" if isinstance(price_minimum, (int, float)) else "-", font=common_font).grid(row=2, column=1, sticky='e', pady=5)
 
     ttk.Label(prices_frame, text="Prezzo Massimo Storico:", font=common_font).grid(row=3, column=0, sticky='w', pady=5)
-    ttk.Label(prices_frame, text=f"{price_maximum:.2f}€", font=common_font).grid(row=3, column=1, sticky='e', pady=5)
+    ttk.Label(prices_frame, text=f"{price_maximum:.2f}€" if isinstance(price_maximum, (int, float)) else "-", font=common_font).grid(row=3, column=1, sticky='e', pady=5)
     
     # Suggerimento basato sui prezzi
     suggerimento_label = ttk.Label(details_window, text=text_suggestion, font=name_font, foreground=color_suggestion)
@@ -1683,57 +1689,149 @@ def show_context_menu(event):
         context_root_menu.post(event.x_root, event.y_root)
 
 
-def on_item_click_to_view(event):
-    """
-    Gestisce il clic su un elemento nella TreeView per visualizzarne i dettagli.
-    Viene chiamata solo se è selezionato esattamente un elemento.
-    
-    Args:
-        event (tk.Event): Evento del mouse che contiene informazioni sul clic.
-    """
-    if len(products_tree.selection()) == 1:
-        show_product_details()
+def save_position(event):
+    global current_index
+
+    item_id = products_tree.identify_row(event.y)
+    items = products_tree.get_children()
+
+    if item_id in items:
+        current_index = items.index(item_id)
 
 
-def update_buttons_state(event=None):
+def shift_click_select(event):
+    global current_index
+
+    # Ottieni l'item cliccato
+    item_id = products_tree.identify_row(event.y)
+    items = products_tree.get_children()
+
+    # Se l'item_id è vuoto, esci dalla funzione
+    if not item_id:
+        return
+
+    # Se current_index è None, parti dal primo elemento (index 0)
+    if current_index is None:
+        current_index = 0
+
+    # Trova l'indice dell'elemento cliccato
+    clicked_index = items.index(item_id)
+
+    # Trova il range tra current_index e clicked_index
+    start = min(current_index, clicked_index)
+    end = max(current_index, clicked_index)
+
+    # Seleziona tutti gli elementi tra current_index e l'elemento cliccato
+    for i in range(start, end + 1):
+        products_tree.selection_add(items[i])
+
+    # Aggiorna current_index all'elemento cliccato
+    current_index = end
+
+
+def navigate_products(event):
     """
-    Aggiorna lo stato dei pulsanti in base agli elementi selezionati nella TreeView.
-    I pulsanti vengono abilitati o disabilitati a seconda se ci sono selezioni multiple,
-    una singola selezione o nessuna selezione.
+    Naviga tra gli elementi della TreeView usando le frecce su e giù.
+    Seleziona il prossimo o il precedente elemento in base alla direzione della freccia.
     
     Args:
-        event (tk.Event, opzionale): Evento del mouse o della tastiera che può scatenare l'aggiornamento.
+        event (tk.Event): Evento della tastiera che indica quale tasto è stato premuto.
     """
+    global current_index
+
     selected_items = products_tree.selection()
-    num_selected = len(selected_items)
 
-    if num_selected > 1:
-        # Se ci sono più di un elemento selezionato
-        remove_button["state"] = "normal"
-        update_button["state"] = "normal"
-        add_button["state"] = "normal"  # Mantieni attivo anche add_button
-        update_all_button["state"] = "normal" if products_to_view else "disabled"
+    if not selected_items:
+        return
+    
+    items = products_tree.get_children()
 
-        edit_button["state"] = "disabled"
-        view_button["state"] = "disabled"
-    elif num_selected == 1:
-        # Se c'è un solo elemento selezionato
-        remove_button["state"] = "normal"
-        update_button["state"] = "normal"
-        edit_button["state"] = "normal"
-        view_button["state"] = "normal"
+    # Ottieni l'indice di ogni elemento selezionato
+    selected_indices = [products_tree.index(item) for item in selected_items]
+    selected_indices.sort()
+    is_consecutive = True
+    # Controlla se sono consecutivi
+    for i in range(1, len(selected_indices)):
+        if selected_indices[i] != selected_indices[i - 1] + 1 or current_index not in selected_indices:
+            products_tree.selection_remove(selected_items)
+            if current_index is None:
+                current_index = products_tree.index(selected_items[0])
+            products_tree.selection_add(items[current_index])
+            selected_items = products_tree.selection()
+            is_consecutive = False
+            break
 
-        add_button["state"] = "normal"
-        update_all_button["state"] = "normal" if products_to_view else "disabled"
+    if is_consecutive and current_index is None:
+        current_index = products_tree.index(selected_items[0])
+
+    temp_index = current_index
+
+    if event.keysym == 'Down':
+        # Se la freccia giù è premuta, vai al prossimo elemento
+        next_index = current_index = min(current_index + 1, len(items) - 1)
+    elif event.keysym == 'Up':
+        # Se la freccia su è premuta, vai all'elemento precedente
+        next_index = current_index = max(current_index - 1, 0)
     else:
-        # Se non ci sono elementi selezionati
-        remove_button["state"] = "disabled"
-        update_button["state"] = "disabled"
-        edit_button["state"] = "disabled"
-        view_button["state"] = "disabled"
+        return
+    
+    if event.state & 0x0001: # Tasto shift premuto
+        if items[next_index] in selected_items:
+            if (next_index != 0 and next_index != len(items) - 1):
+                products_tree.selection_remove(items[temp_index])
+        else:
+            products_tree.selection_add(items[next_index])
+    else:
+        # Se il tasto Shift non è premuto, aggiorna la selezione
+        products_tree.selection_remove(selected_items)
+        products_tree.selection_add(items[next_index])
 
-        add_button["state"] = "normal"
-        update_all_button["state"] = "normal" if products_to_view else "disabled"
+    products_tree.see(items[next_index])
+
+
+def select_all(event=None):
+    """
+    Seleziona tutti gli elementi nella TreeView.
+    
+    Args:
+        event (tk.Event, opzionale): Evento che può scatenare la selezione. Non utilizzato in questa funzione.
+    """
+    global current_index
+
+    products_tree.selection_set(products_tree.get_children())
+    current_index = None
+
+
+def clear_selection(event=None):
+    """
+    Deseleziona tutti gli elementi nella TreeView se il clic è avvenuto in un'area vuota.
+    Se il clic è avvenuto su una riga, non fa nulla.
+    
+    Args:
+        event (tk.Event, opzionale): Evento del mouse che può indicare la posizione del clic.
+    """
+    global current_index
+
+    # Identifica la riga sotto il puntatore del mouse
+    row_id = products_tree.identify_row(event.y)
+
+    if not row_id:
+        # Se il clic è avvenuto in un'area vuota della TreeView, deseleziona tutti gli elementi
+        if event.widget == products_tree:
+            products_tree.selection_remove(*products_tree.selection())
+            current_index = None
+
+
+def on_shift_press(event):
+    global is_shift_pressed
+
+    is_shift_pressed = True
+
+
+def on_shift_release(event):
+    global is_shift_pressed
+    
+    is_shift_pressed = False
 
 
 def periodic_update():
@@ -1775,16 +1873,16 @@ def periodic_update():
 
         # Inserisce i nuovi dati nella TreeView
         for name in products_to_view:
-            timer_text = calculate_time_remaining(products_to_view[name]["timer"], products_to_view[name]["timer_refresh"])
+            timer_text = calculate_time_remaining(products_to_view[name]['timer'], products_to_view[name]['timer_refresh'])
             products_tree.insert("", "end", iid=name, values=(
                 name,
-                products_to_view[name]["url"],
+                products_to_view[name]['url'],
                 f"{str(products_to_view[name]['price'])}€",
-                "Si" if products_to_view[name]["notify"] else "No",
+                "Si" if products_to_view[name]['notify'] else "No",
                 timer_text,
-                products_to_view[name]["timer_refresh"],
-                products_to_view[name]["date_added"],
-                products_to_view[name]["date_edited"]
+                products_to_view[name]['timer_refresh'],
+                products_to_view[name]['date_added'],
+                products_to_view[name]['date_edited']
             ))
 
         # Ripristina la selezione
@@ -1792,72 +1890,50 @@ def periodic_update():
             if item_id in products_tree.get_children():
                 products_tree.selection_add(item_id)
 
-    refresh_treeview()
+    def update_buttons_state():
+        """
+        Aggiorna lo stato dei pulsanti in base agli elementi selezionati nella TreeView.
+        I pulsanti vengono abilitati o disabilitati a seconda se ci sono selezioni multiple,
+        una singola selezione o nessuna selezione. 
+        """
+        selected_items = products_tree.selection()
+        num_selected = len(selected_items)
+
+        if num_selected > 1:
+            # Se ci sono più di un elemento selezionato
+            remove_button['state'] = "normal"
+            update_button['state'] = "normal"
+            add_button['state'] = "normal"  # Mantieni attivo anche add_button
+            update_all_button['state'] = "normal" if products_to_view else "disabled"
+
+            edit_button['state'] = "disabled"
+            view_button['state'] = "disabled"
+        elif num_selected == 1:
+            # Se c'è un solo elemento selezionato
+            remove_button['state'] = "normal"
+            update_button['state'] = "normal"
+            edit_button['state'] = "normal"
+            view_button['state'] = "normal"
+
+            add_button['state'] = "normal"
+            update_all_button['state'] = "normal" if products_to_view else "disabled"
+        else:
+            # Se non ci sono elementi selezionati
+            remove_button['state'] = "disabled"
+            update_button['state'] = "disabled"
+            edit_button['state'] = "disabled"
+            view_button['state'] = "disabled"
+
+            add_button['state'] = "normal"
+            update_all_button['state'] = "normal" if products_to_view else "disabled"
+
+    if not is_shift_pressed:
+        refresh_treeview()
+
     update_buttons_state()
 
     # Richiama periodicamente questa funzione
     root.after(500, periodic_update)  # Ogni 500 millisecondi
-
-
-def select_all(event=None):
-    """
-    Seleziona tutti gli elementi nella TreeView.
-    
-    Args:
-        event (tk.Event, opzionale): Evento che può scatenare la selezione. Non utilizzato in questa funzione.
-    """
-    # Seleziona tutti i figli della TreeView
-    products_tree.selection_set(products_tree.get_children())
-
-
-def clear_selection(event=None):
-    """
-    Deseleziona tutti gli elementi nella TreeView se il clic è avvenuto in un'area vuota.
-    Se il clic è avvenuto su una riga, non fa nulla.
-    
-    Args:
-        event (tk.Event, opzionale): Evento del mouse che può indicare la posizione del clic.
-    """
-    # Identifica la riga sotto il puntatore del mouse
-    row_id = products_tree.identify_row(event.y)
-    
-    if row_id:
-        # Se il clic è avvenuto su una riga, non deseleziona nulla
-        return
-    else:
-        # Se il clic è avvenuto in un'area vuota della TreeView, deseleziona tutti gli elementi
-        if event.widget == products_tree:
-            products_tree.selection_remove(*products_tree.selection())
-
-
-def navigate_products(event):
-    """
-    Naviga tra gli elementi della TreeView usando le frecce su e giù.
-    Seleziona il prossimo o il precedente elemento in base alla direzione della freccia.
-    
-    Args:
-        event (tk.Event): Evento della tastiera che indica quale tasto è stato premuto.
-    """
-    selected_item = products_tree.selection()
-    if not selected_item:
-        return  # Nessun elemento selezionato
-
-    current_index = products_tree.index(selected_item[0])
-    items = products_tree.get_children()
-
-    if event.keysym == 'Down':
-        # Se la freccia giù è premuta, vai al prossimo elemento
-        next_index = (current_index + 1) % len(items)
-    elif event.keysym == 'Up':
-        # Se la freccia su è premuta, vai all'elemento precedente
-        next_index = (current_index - 1) % len(items)
-    else:
-        return
-
-    # Aggiorna la selezione
-    products_tree.selection_remove(selected_item)
-    products_tree.selection_add(items[next_index])
-    products_tree.see(items[next_index])
 
 
 # Configurazioni
@@ -1880,6 +1956,10 @@ sort_state = {
 }
 
 common_font = ('Arial', 10)
+
+current_index = None
+
+is_shift_pressed = False
 
 # Creazione della finestra principale
 root = tk.Tk()
@@ -1938,7 +2018,7 @@ products_tree = ttk.Treeview(frame_products_tree, columns=columns, show="heading
 # Configurazione delle colonne della TreeView
 for idx, col in enumerate(columns):
     products_tree.heading(col, text=col, anchor='center', command=lambda _idx=idx: sort_by_column(_idx))
-    products_tree.column(col, width=80 if col in ["Notifica"] else 200, anchor='center' if col in ["Prezzo", "Notifica", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica"] else 'w')
+    products_tree.column(col, width=80 if col in ['Notifica'] else 200, anchor='center' if col in ['Prezzo', 'Notifica', 'Timer', 'Timer Aggiornamento [s]', 'Data Inserimento', 'Data Ultima Modifica'] else 'w')
 products_tree.pack(fill="both", expand=True, padx=10, pady=10)
 
 # Scrollbar
@@ -1959,19 +2039,27 @@ multi_selection_menu.add_command(label="Rimuovi selezionati", command=remove_pro
 multi_selection_menu.add_command(label="Aggiorna selezionati", command=update_selected_prices)
 
 # Binding degli eventi
+products_tree.bind("<Double-1>", show_product_details)
+products_tree.bind("<Return>", show_product_details)
 products_tree.bind("<Button-3>", show_context_menu)
-products_tree.bind("<Control-a>", select_all)
-root.bind("<Button-1>", clear_selection)
-products_tree.bind("<Double-1>", on_item_click_to_view)
-products_tree.bind("<Return>", on_item_click_to_view)
+products_tree.bind("<Button-1>", save_position)
+products_tree.bind("<Shift-Button-1>", shift_click_select)
 products_tree.bind("<Down>", navigate_products)
 products_tree.bind("<Up>", navigate_products)
+
+root.bind("<Control-a>", select_all)
+root.bind("<Button-1>", clear_selection)
+root.bind("<Shift_L>", on_shift_press)
+root.bind("<KeyRelease-Shift_L>", on_shift_release)
+root.bind("<Shift_R>", on_shift_press)
+root.bind("<KeyRelease-Shift_R>", on_shift_release)
 
 # Carica dati e avvia l'aggiornamento periodico
 load_data()
 load_prices_data()
 periodic_update()
 
+# Reset dei timer
 for name in products:
     products[name]['timer'] = time.time()
 save_data()
