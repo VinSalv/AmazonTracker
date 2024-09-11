@@ -4,3 +4,4 @@ PyQt5
 PyQtWebEngine
 requests
 beautifulsoup4
+pyperclip

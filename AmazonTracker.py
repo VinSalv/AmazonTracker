@@ -11,6 +11,7 @@ from PyQt5.QtCore import QUrl
 import tempfile
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
+import pyperclip
 import requests
 from bs4 import BeautifulSoup
 import smtplib
@@ -1137,12 +1138,10 @@ def open_edit_product_dialog():
     center_window(edit_product_dialog)
 
 
-def remove_product():
+def remove_products():
     """
     Rimuove i prodotti selezionati dalla lista e ferma il monitoraggio.
     """
-    global stop_events, threads  # Dichiarazione delle variabili globali
-
     def stop_tracking(name):
         """
         Ferma il monitoraggio per un prodotto specificato e rimuove il relativo thread.
@@ -1160,8 +1159,7 @@ def remove_product():
         if name in stop_events:
             del stop_events[name]
 
-    # Resetta i filtri per riflettere la rimozione del prodotto
-    reset_filters()
+    global stop_events, threads
 
     # Recupera la selezione dell'utente
     selected = products_tree.selection()
@@ -1170,21 +1168,34 @@ def remove_product():
         logger.warning("Seleziona un prodotto dalla lista per rimuoverlo")
         return
 
-    for name in selected:
-        if name in products:
-            # Rimuove il prodotto dalla lista
-            del products[name]
+    num_selected = len(selected)
 
-            # Salva i dati dopo la rimozione
-            save_data()
-            
-            # Ferma il monitoraggio del prodotto
-            stop_tracking(name)
+    # Chiede conferma all'utente
+    response = messagebox.askyesno(
+        "Conferma rimozione",
+        f"Sei sicuro di voler rimuovere i {num_selected} prodotti selezionati?" if num_selected > 1 else f"Sei sicuro di voler rimuovere il prodotto selezionato?"
+    )
 
-            # Logga l'azione di rimozione
-            logger.info(f"Prodotto '{name}' rimosso con successo")
-        else:
-            logger.warning(f"Il prodotto '{name}' non è presente nella lista")
+    # Se l'utente conferma, procedi con la rimozione
+    if response:
+        # Resetta i filtri per riflettere la rimozione del prodotto
+        reset_filters()
+
+        for name in selected:
+            if name in products:
+                # Rimuove il prodotto dalla lista
+                del products[name]
+
+                # Salva i dati dopo la rimozione
+                save_data()
+                
+                # Ferma il monitoraggio del prodotto
+                stop_tracking(name)
+
+                # Logga l'azione di rimozione
+                logger.info(f"Prodotto '{name}' rimosso con successo")
+            else:
+                logger.warning(f"Il prodotto '{name}' non è presente nella lista")
 
 
 def send_notification_and_email(name, prev_price, curr_price):
@@ -1239,6 +1250,39 @@ def send_notification_and_email(name, prev_price, curr_price):
             send_email(subject=subject_to_send, body=body_to_send, email_to_notify=email)
 
 
+def disable_controls():
+    add_button.config(state="disabled")
+    view_button.config(state="disabled")
+    edit_button.config(state="disabled")
+    remove_button.config(state="disabled")
+    update_button.config(state="disabled")
+    update_all_button.config(state="disabled")
+    search_entry.config(state="disabled")
+
+
+def enable_controls():
+    add_button.config(state="normal")
+    view_button.config(state="normal")
+    edit_button.config(state="normal")
+    remove_button.config(state="normal")
+    update_button.config(state="normal")
+    update_all_button.config(state="normal")
+    search_entry.config(state="normal")
+
+
+def show_progress_bar(max_value):
+    frame_progress.pack(side="left")
+
+    progress_label.config(text = "Aggiornamento in corso...")
+
+    progress_bar["maximum"] = max_value
+    progress_bar["value"] = 0
+
+
+def hide_progress_bar():
+    frame_progress.pack_forget()
+
+
 def update_selected_prices():
     """
     Aggiorna i prezzi dei prodotti selezionati e notifica eventuali cambiamenti.
@@ -1253,10 +1297,14 @@ def update_selected_prices():
         logger.warning("Nessun prodotto selezionato per aggiornare il prezzo")
         return
 
+    # Disabilita i controlli e mostra la barra di caricamento
+    disable_controls()
+    show_progress_bar(len(selected))
+
     updated_products = []
 
     # Itera sui prodotti selezionati per aggiornare i prezzi
-    for item in selected:
+    for i, item in enumerate(selected):
         name = item
         current_price = get_price(products[name]['url'])
 
@@ -1283,6 +1331,10 @@ def update_selected_prices():
         # Salva i dati dei prezzi aggiornati
         save_prices_data(name, products[name]['price'])
 
+        # Aggiorna il progresso
+        progress_bar["value"] = i + 1
+        root.update_idletasks()  # Forza l'aggiornamento grafico della barra
+
     # Salva tutti i dati dei prodotti aggiornati
     save_data()
 
@@ -1305,6 +1357,10 @@ def update_selected_prices():
     else:
         messagebox.showwarning("Attenzione", "Nessun prezzo aggiornato!\nAggiornali nuovamente")
         logger.warning("Nessun prodotto selezionato è stato aggiornato")
+    
+    # Rimuove la barra di caricamento e abilita di nuovo i controlli
+    hide_progress_bar()
+    enable_controls()
 
 
 def update_all_prices():
@@ -1314,10 +1370,14 @@ def update_all_prices():
     # Resetta i filtri (se presenti)
     reset_filters()
 
+    # Disabilita i controlli e mostra la barra di caricamento
+    disable_controls()
+    show_progress_bar(len(products))
+
     updated_products = []
 
     # Itera su tutti i prodotti per aggiornare i prezzi
-    for name in products:
+    for i, name in enumerate(products):
         current_price = get_price(products[name]['url'])
 
         if current_price is None:
@@ -1343,6 +1403,10 @@ def update_all_prices():
         # Salva i dati dei prezzi aggiornati
         save_prices_data(name, products[name]['price'])
 
+        # Aggiorna il progresso
+        progress_bar["value"] = i + 1
+        root.update_idletasks()  # Forza l'aggiornamento grafico della barra
+
     # Salva tutti i dati dei prodotti aggiornati
     save_data()
 
@@ -1365,6 +1429,10 @@ def update_all_prices():
     else:
         messagebox.showwarning("Attenzione", "Nessun prezzo aggiornato!\nAggiornali tutti nuovamente")
         logger.warning("Nessun prodotto è stato aggiornato")
+
+    # Rimuove la barra di caricamento e abilita di nuovo i controlli
+    hide_progress_bar()
+    enable_controls()
 
 
 def view_graph_for_product(product_name):
@@ -1565,7 +1633,14 @@ def show_product_details(event=None):
 
     Args:
         event (tk.Event, opzionale): Evento che può scatenare la selezione. Non utilizzato in questa funzione.
-    """    
+    """
+    def copy_to_clipboard(text):
+        """
+        Copia il testo negli appunti.
+        """
+        pyperclip.copy(text)
+        messagebox.showinfo("Copia negli appunti", "URL copiato negli appunti!")
+
     selected = products_tree.selection()
 
     if not selected:
@@ -1628,9 +1703,12 @@ def show_product_details(event=None):
 
     # URL del prodotto
     truncated_url = (url[:45] + '...') if len(url) > 45 else url
-    url_label = ttk.Label(top_frame, text=truncated_url, font=common_font, foreground="blue", cursor="hand2", wraplength=400)
+    url_label = ttk.Label(top_frame, text=truncated_url, font=common_font, foreground="blue", cursor="hand2")
     url_label.grid(row=1, column=0, sticky='w')
     url_label.bind("<Button-1>", lambda e: webbrowser.open(url))
+
+    copy_image_label = ttk.Button(top_frame, text="Copia url", command=lambda:copy_to_clipboard(url))
+    copy_image_label.grid(row=1, column=1, sticky='e')
 
     # Frame per le informazioni sui prezzi
     prices_frame = ttk.Frame(details_window)
@@ -1656,6 +1734,7 @@ def show_product_details(event=None):
     
     # Pulsante per chiudere la finestra
     ttk.Button(details_window, text="Chiudi", command=details_window.destroy).pack(pady=10)
+    details_window.update_idletasks()
 
 
 def show_context_menu(event):
@@ -1689,7 +1768,7 @@ def show_context_menu(event):
         context_root_menu.post(event.x_root, event.y_root)
 
 
-def save_position(event):
+def click_products(event):
     global current_index
 
     item_id = products_tree.identify_row(event.y)
@@ -1709,7 +1788,7 @@ def save_position(event):
                 products_tree.selection_add(items[current_index])  # Seleziona se non è selezionato
 
 
-def shift_click_select(event):
+def shift_click_products(event):
     global current_index
 
     products_tree.selection_remove(*products_tree.selection())
@@ -1798,7 +1877,7 @@ def navigate_products(event):
     products_tree.see(items[next_index])
 
 
-def select_all(event=None):
+def select_all_products(event=None):
     """
     Seleziona tutti gli elementi nella TreeView.
     
@@ -1811,7 +1890,7 @@ def select_all(event=None):
     current_index = None
 
 
-def clear_selection(event=None):
+def clear_selected_products(event=None):
     """
     Deseleziona tutti gli elementi nella TreeView se il clic è avvenuto in un'area vuota.
     Se il clic è avvenuto su una riga, non fa nulla.
@@ -1965,7 +2044,7 @@ limit_letters = (root.register(lambda s: len(s) <= 50), '%P')
 
 # Frame per l'input dell'utente
 input_frame = ttk.Frame(root)
-input_frame.pack(fill="x", padx=10, pady=10)
+input_frame.pack(fill="x", padx=10, pady=(15, 0))
 
 # Bottone Aggiungi
 add_button = ttk.Button(input_frame, text="Aggiungi", command=open_add_product_dialog)
@@ -1980,7 +2059,7 @@ edit_button = ttk.Button(input_frame, text="Modifica", command=open_edit_product
 edit_button.grid(row=2, column=2, padx=5, pady=5, sticky="we")
 
 # Bottone Rimuovi
-remove_button = ttk.Button(input_frame, text="Rimuovi", command=remove_product, state="disabled")
+remove_button = ttk.Button(input_frame, text="Rimuovi", command=remove_products, state="disabled")
 remove_button.grid(row=2, column=3, padx=5, pady=5, sticky="we")
 
 # Colonna vuota per separare i bottoni
@@ -2006,44 +2085,58 @@ search_entry.bind("<KeyRelease>", lambda event: update_products_to_view())
 
 # Tabella dei prodotti
 frame_products_tree = tk.Frame(root)
-frame_products_tree.pack(fill="both", expand=True, padx=10, pady=10)
+frame_products_tree.pack(fill="both", expand=True, padx=(15, 10), pady=(10, 0))
 products_tree = ttk.Treeview(frame_products_tree, columns=columns, show="headings", selectmode="none")
-
 # Configurazione delle colonne della TreeView
 for idx, col in enumerate(columns):
     products_tree.heading(col, text=col, anchor='center', command=lambda _idx=idx: sort_by_column(_idx))
     products_tree.column(col, width=80 if col in ['Notifica'] else 200, anchor='center' if col in ['Prezzo', 'Notifica', 'Timer', 'Timer Aggiornamento [s]', 'Data Inserimento', 'Data Ultima Modifica'] else 'w')
-products_tree.pack(fill="both", expand=True, padx=10, pady=10)
-
 # Scrollbar
 scrollbar = ttk.Scrollbar(frame_products_tree, orient="vertical", command=products_tree.yview)
 products_tree.configure(yscrollcommand=scrollbar.set)
 products_tree.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
 
+# Frame per la barra di progresso e la label
+frame_footer = tk.Frame(root)
+frame_footer.pack(side="bottom", fill="x", padx=(20, 40), pady=5)
+
+frame_progress = tk.Frame(frame_footer)
+frame_progress.pack(side="left")
+
+progress_label = tk.Label(frame_progress, text="Aggiornamento in corso...", font=("Arial", 8))
+progress_label.pack(side="left", padx=5)
+
+progress_bar = ttk.Progressbar(frame_progress, orient="horizontal", length=150, mode="determinate")
+progress_bar.pack(side="right")
+
+creator_label = tk.Label(frame_footer, text="Prodotto da Vincenzo Salvati", font=("Arial", 8))
+creator_label.pack(side="right")
+
+hide_progress_bar()
+
 # Menu contestuale per la TreeView
 context_root_menu = tk.Menu(root, tearoff=0)
 context_root_menu.add_command(label="Visualizza prodotto", command=show_product_details)
 context_root_menu.add_command(label="Modifica prodotto", command=open_edit_product_dialog)
-context_root_menu.add_command(label="Rimuovi prodotto", command=remove_product)
+context_root_menu.add_command(label="Rimuovi prodotto", command=remove_products)
 
 # Menu contestuale per selezione multipla
 multi_selection_menu = tk.Menu(root, tearoff=0)
-multi_selection_menu.add_command(label="Rimuovi selezionati", command=remove_product)
+multi_selection_menu.add_command(label="Rimuovi selezionati", command=remove_products)
 multi_selection_menu.add_command(label="Aggiorna selezionati", command=update_selected_prices)
 
 # Binding degli eventi
 products_tree.bind("<Double-1>", show_product_details)
 products_tree.bind("<Return>", show_product_details)
 products_tree.bind("<Button-3>", show_context_menu)
-products_tree.bind("<Button-1>", save_position)
-products_tree.bind("<Shift-Button-1>", shift_click_select)
+products_tree.bind("<Button-1>", click_products)
+products_tree.bind("<Shift-Button-1>", shift_click_products)
 products_tree.bind("<Down>", navigate_products)
 products_tree.bind("<Up>", navigate_products)
 
-root.bind("<Control-a>", select_all)
-root.bind("<Button-1>", clear_selection)
-
+root.bind("<Control-a>", select_all_products)
+root.bind("<Button-1>", clear_selected_products)
 
 # Carica dati
 load_data()
