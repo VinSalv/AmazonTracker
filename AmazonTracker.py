@@ -1697,10 +1697,22 @@ def save_position(event):
 
     if item_id in items:
         current_index = items.index(item_id)
+        if not event.state & 0x0004:  # Se Ctrl NON è premuto
+            # Rimuovi la selezione corrente e seleziona solo l'elemento cliccato
+            products_tree.selection_remove(*products_tree.selection())
+            products_tree.selection_add(items[current_index])
+        else:  # Se Ctrl è premuto
+            # Verifica se l'elemento è già selezionato (toggle)
+            if items[current_index] in products_tree.selection():
+                products_tree.selection_remove(items[current_index])  # Deseleziona se è selezionato
+            else:
+                products_tree.selection_add(items[current_index])  # Seleziona se non è selezionato
 
 
 def shift_click_select(event):
     global current_index
+
+    products_tree.selection_remove(*products_tree.selection())
 
     # Ottieni l'item cliccato
     item_id = products_tree.identify_row(event.y)
@@ -1724,9 +1736,6 @@ def shift_click_select(event):
     # Seleziona tutti gli elementi tra current_index e l'elemento cliccato
     for i in range(start, end + 1):
         products_tree.selection_add(items[i])
-
-    # Aggiorna current_index all'elemento cliccato
-    current_index = end
 
 
 def navigate_products(event):
@@ -1822,18 +1831,6 @@ def clear_selection(event=None):
             current_index = None
 
 
-def on_shift_press(event):
-    global is_shift_pressed
-
-    is_shift_pressed = True
-
-
-def on_shift_release(event):
-    global is_shift_pressed
-    
-    is_shift_pressed = False
-
-
 def periodic_update():
     """
     Esegue aggiornamenti periodici sulla TreeView e sui pulsanti.
@@ -1927,8 +1924,7 @@ def periodic_update():
             add_button['state'] = "normal"
             update_all_button['state'] = "normal" if products_to_view else "disabled"
 
-    if not is_shift_pressed:
-        refresh_treeview()
+    refresh_treeview()
 
     update_buttons_state()
 
@@ -1958,8 +1954,6 @@ sort_state = {
 common_font = ('Arial', 10)
 
 current_index = None
-
-is_shift_pressed = False
 
 # Creazione della finestra principale
 root = tk.Tk()
@@ -2013,7 +2007,7 @@ search_entry.bind("<KeyRelease>", lambda event: update_products_to_view())
 # Tabella dei prodotti
 frame_products_tree = tk.Frame(root)
 frame_products_tree.pack(fill="both", expand=True, padx=10, pady=10)
-products_tree = ttk.Treeview(frame_products_tree, columns=columns, show="headings")
+products_tree = ttk.Treeview(frame_products_tree, columns=columns, show="headings", selectmode="none")
 
 # Configurazione delle colonne della TreeView
 for idx, col in enumerate(columns):
@@ -2049,20 +2043,19 @@ products_tree.bind("<Up>", navigate_products)
 
 root.bind("<Control-a>", select_all)
 root.bind("<Button-1>", clear_selection)
-root.bind("<Shift_L>", on_shift_press)
-root.bind("<KeyRelease-Shift_L>", on_shift_release)
-root.bind("<Shift_R>", on_shift_press)
-root.bind("<KeyRelease-Shift_R>", on_shift_release)
 
-# Carica dati e avvia l'aggiornamento periodico
+
+# Carica dati
 load_data()
 load_prices_data()
-periodic_update()
 
 # Reset dei timer
 for name in products:
     products[name]['timer'] = time.time()
 save_data()
+
+# Avvia l'aggiornamento periodico
+periodic_update()
 
 # Avvia il main loop dell'interfaccia grafica
 root.mainloop()
