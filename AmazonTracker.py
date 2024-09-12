@@ -625,12 +625,13 @@ def open_add_product_dialog():
         """
         # Ottieni il testo digitato e rimuovi spazi bianchi
         typed_text = name_entry_var.get().strip().lower()
-        listbox_suggestions.delete(0, tk.END)
-        
+        listbox_suggestions.delete(0, tk.END)        
+
         if typed_text:
             # Trova i nomi dei prodotti che corrispondono al testo digitato
             matching_suggestions = [name for name in prices.keys() if typed_text in name.lower()]
             
+            listbox_suggestions.insert(tk.END, name_entry.get())
             for suggestion in matching_suggestions:
                 listbox_suggestions.insert(tk.END, suggestion)
 
