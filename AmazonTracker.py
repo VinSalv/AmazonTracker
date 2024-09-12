@@ -530,6 +530,79 @@ def center_window(window):
     window.geometry(f'{width}x{height}+{x}+{y}')
 
 
+def show_text_menu(event, widget, onlyRead=False):
+    # Funzione per controllare se c'è testo selezionato
+    def is_text_selected(widget):
+        try:
+            if isinstance(widget, tk.Text):
+                return widget.tag_ranges(tk.SEL) != ()
+            elif isinstance(widget, ttk.Entry):
+                return widget.selection_present()
+        except tk.TclError:
+            return False
+        return False
+
+    # Funzione per controllare se c'è testo negli appunti
+    def is_clipboard_available():
+        try:
+            return bool(root.clipboard_get())
+        except tk.TclError:
+            return False
+
+    # Funzione per copiare il testo di una Label o del widget
+    def copy_text(widget):
+        try:
+            if isinstance(widget, tk.Label):
+                root.clipboard_clear()
+                root.clipboard_append(widget.cget("text"))  # Copia il testo della label
+            else:
+                widget.event_generate("<<Copy>>")
+        except tk.TclError:
+            pass
+
+    # Funzione per tagliare il testo (solo per Entry e Text)
+    def cut_text(widget):
+        try:
+            widget.event_generate("<<Cut>>")
+        except tk.TclError:
+            pass
+
+    # Funzione per incollare il testo (solo per Entry e Text)
+    def paste_text(widget):
+        try:
+            widget.event_generate("<<Paste>>")
+        except tk.TclError:
+            pass
+
+    text_menu = tk.Menu(root, tearoff=0)
+
+    if onlyRead:
+        # Per le Label, abilitiamo solo la copia
+        if is_text_selected(widget):
+            text_menu.add_command(label="Copia", command=lambda: copy_text(widget))
+        else:
+            text_menu.add_command(label="Copia", state="disabled")
+        text_menu.add_command(label="Taglia", state="disabled")
+        text_menu.add_command(label="Incolla", state="disabled")
+    else:
+        # Controllo se c'è testo selezionato per abilitare/disabilitare Taglia e Copia
+        if is_text_selected(widget):
+            text_menu.add_command(label="Taglia", command=lambda: cut_text(widget))
+            text_menu.add_command(label="Copia", command=lambda: copy_text(widget))
+        else:
+            text_menu.add_command(label="Taglia", state="disabled")
+            text_menu.add_command(label="Copia", state="disabled")
+
+        # Controllo se c'è testo negli appunti per abilitare/disabilitare Incolla
+        if is_clipboard_available():
+            text_menu.add_command(label="Incolla", command=lambda: paste_text(widget))
+        else:
+            text_menu.add_command(label="Incolla", state="disabled")
+
+    # Mostra il menu contestuale
+    text_menu.tk_popup(event.x_root, event.y_root)
+
+
 def open_add_product_dialog():
     """
     Apre una finestra di dialogo per aggiungere un nuovo prodotto con URL e impostare altre opzioni.
@@ -704,10 +777,12 @@ def open_add_product_dialog():
         ttk.Label(container, text="Email:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
         email_entry = ttk.Entry(container, width=40, font=common_font)
         email_entry.grid(row=0, column=1, padx=10, pady=10, sticky='w')
+        email_entry.bind("<Button-3>", lambda e: show_text_menu(e, email_entry))
 
         ttk.Label(container, text="Soglia:").grid(row=1, column=0, padx=10, pady=10, sticky="we")
         threshold_entry = ttk.Entry(container, width=20, font=common_font, validate='key', validatecommand=(root.register(lambda s: s.isdigit() or s in ['.', '-']), '%S'))
         threshold_entry.grid(row=1, column=1, padx=10, pady=10, sticky='w')
+        threshold_entry.bind("<Button-3>", lambda e: show_text_menu(e, threshold_entry))
 
         add_button = ttk.Button(container, text="Aggiungi", command=add_email_threshold)
         add_button.grid(row=2, column=0, columnspan=2, pady=10, sticky="e")
@@ -743,9 +818,8 @@ def open_add_product_dialog():
         timer_entry = ttk.Entry(container, width=20, font=common_font, validate='key', validatecommand=(root.register(validate_timer_input), '%P'))
         timer_entry.grid(row=4, column=1, padx=10, pady=10, sticky='w')
         timer_entry.insert(0, timer_refresh)
-
-        # Associa la funzione di callback per aggiornare il valore del timer
         timer_entry.bind('<KeyRelease>', on_timer_change)
+        timer_entry.bind("<Button-3>", lambda e: show_text_menu(e, timer_entry))
 
         advanced_dialog.transient(root)
         advanced_dialog.grab_set()
@@ -824,6 +898,7 @@ def open_add_product_dialog():
 
     name_entry = ttk.Entry(container, width=80, font=common_font, textvariable=name_entry_var, validate='key', validatecommand=limit_letters)
     name_entry.grid(row=0, column=1, padx=10, pady=10, sticky='w')
+    name_entry.bind("<Button-3>", lambda e: show_text_menu(e, name_entry))
 
     # Listbox per suggerimenti
     listbox_suggestions = tk.Listbox(add_product_dialog, width=80)
@@ -842,6 +917,7 @@ def open_add_product_dialog():
 
     url_text = tk.Text(text_frame, height=5, width=80, font=common_font)
     url_text.pack(side="left", fill="both", expand=True)
+    url_text.bind("<Button-3>", lambda e: show_text_menu(e, url_text))
 
     scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=url_text.yview)
     scrollbar.pack(side="right", fill="y")
@@ -987,10 +1063,12 @@ def open_edit_product_dialog():
         ttk.Label(container, text="Email:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
         email_entry = ttk.Entry(container, width=40, font=common_font)
         email_entry.grid(row=0, column=1, padx=10, pady=10, sticky='w')
+        email_entry.bind("<Button-3>", lambda e: show_text_menu(e, email_entry))
 
         ttk.Label(container, text="Soglia:").grid(row=1, column=0, padx=10, pady=10, sticky="we")
         threshold_entry = ttk.Entry(container, width=20, font=common_font, validate='key', validatecommand=(root.register(lambda s: s.isdigit() or s in ['.', '-']), '%S'))
         threshold_entry.grid(row=1, column=1, padx=10, pady=10, sticky='w')
+        threshold_entry.bind("<Button-3>", lambda e: show_text_menu(e, threshold_entry))
 
         add_button = ttk.Button(container, text="Aggiungi", command=add_email_threshold)
         add_button.grid(row=2, column=0, columnspan=2, pady=10, sticky="e")
@@ -1024,6 +1102,7 @@ def open_edit_product_dialog():
         timer_entry.grid(row=4, column=1, padx=10, pady=10, sticky='w')
         timer_entry.insert(0, timer_refresh)
         timer_entry.bind('<KeyRelease>', on_timer_change)
+        timer_entry.bind("<Button-3>", lambda e: show_text_menu(e, timer_entry))
 
         update_table()
 
@@ -1100,6 +1179,7 @@ def open_edit_product_dialog():
     text_widget = tk.Text(container, font=common_font, height=1, width=len(selected_name), wrap='none', bd=0, bg='white')
     text_widget.insert(tk.END, selected_name)
     text_widget.grid(row=0, column=1, padx=10, pady=10, sticky="w")
+    text_widget.bind("<Button-3>", lambda e: show_text_menu(e, text_widget, True))
     
     # Rendere il testo solo in lettura
     text_widget.config(state=tk.DISABLED)
@@ -1114,6 +1194,7 @@ def open_edit_product_dialog():
     url_text = tk.Text(text_frame, height=5, width=80)
     url_text.pack(side="left", fill="both", expand=True)
     url_text.insert("1.0", selected_url)
+    url_text.bind("<Button-3>", lambda e: show_text_menu(e, url_text))
     
     # Crea la scrollbar
     scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=url_text.yview)
@@ -1634,12 +1715,13 @@ def show_product_details(event=None):
     Args:
         event (tk.Event, opzionale): Evento che può scatenare la selezione. Non utilizzato in questa funzione.
     """
-    def copy_to_clipboard(text):
+    def copy_to_clipboard(text, show_info=False):
         """
         Copia il testo negli appunti.
         """
         pyperclip.copy(text)
-        messagebox.showinfo("Copia negli appunti", "URL copiato negli appunti!")
+        if show_info:
+            messagebox.showinfo("Copia negli appunti", "URL copiato negli appunti!")
 
     selected = products_tree.selection()
 
@@ -1765,7 +1847,7 @@ def show_context_menu(event):
     if len(selected_items) > 1:
         multi_selection_menu.post(event.x_root, event.y_root)
     elif len(selected_items) == 1:
-        context_root_menu.post(event.x_root, event.y_root)
+        single_selection_menu.post(event.x_root, event.y_root)
 
 
 def click_products(event):
@@ -2082,6 +2164,7 @@ search_entry = ttk.Entry(search_frame, width=80, font=common_font, validate='key
 search_entry.grid(row=0, column=1, padx=10, pady=10, sticky='we')
 search_entry.update_idletasks()
 search_entry.bind("<KeyRelease>", lambda event: update_products_to_view())
+search_entry.bind("<Button-3>", lambda e: show_text_menu(e, search_entry))
 
 # Tabella dei prodotti
 frame_products_tree = tk.Frame(root)
@@ -2115,11 +2198,11 @@ creator_label.pack(side="right")
 
 hide_progress_bar()
 
-# Menu contestuale per la TreeView
-context_root_menu = tk.Menu(root, tearoff=0)
-context_root_menu.add_command(label="Visualizza prodotto", command=show_product_details)
-context_root_menu.add_command(label="Modifica prodotto", command=open_edit_product_dialog)
-context_root_menu.add_command(label="Rimuovi prodotto", command=remove_products)
+# Menu contestuale per la singola selezione
+single_selection_menu = tk.Menu(root, tearoff=0)
+single_selection_menu.add_command(label="Visualizza prodotto", command=show_product_details)
+single_selection_menu.add_command(label="Modifica prodotto", command=open_edit_product_dialog)
+single_selection_menu.add_command(label="Rimuovi prodotto", command=remove_products)
 
 # Menu contestuale per selezione multipla
 multi_selection_menu = tk.Menu(root, tearoff=0)
