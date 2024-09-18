@@ -371,8 +371,8 @@ def start_tracking(name, url):
     # Se c'è già un thread attivo, fermalo prima di avviarne uno nuovo
     if name in threads and threads[name].is_alive():
         logger.info(f"Fermando il monitoraggio precedente di '{name}'...")
-        stop_events[name].set()  # Segnala al thread corrente di fermarsi
-        threads[name].join(timeout=1)  # Aspetta che il thread corrente termini
+        stop_events[name].set() # Segnala al thread corrente di fermarsi
+        threads[name].join(timeout=1) # Aspetta che il thread corrente termini
 
     # Crea un nuovo evento di stop e avvia un nuovo thread
     stop_events[name] = threading.Event()  # Crea un nuovo evento per il nuovo thread
@@ -1332,189 +1332,222 @@ def send_notification_and_email(name, prev_price, curr_price):
             send_email(subject=subject_to_send, body=body_to_send, email_to_notify=email)
 
 
-def disable_controls():
-    add_button.config(state="disabled")
-    view_button.config(state="disabled")
-    edit_button.config(state="disabled")
-    remove_button.config(state="disabled")
-    update_button.config(state="disabled")
-    update_all_button.config(state="disabled")
-    search_entry.config(state="disabled")
-
-
-def enable_controls():
-    add_button.config(state="normal")
-    view_button.config(state="normal")
-    edit_button.config(state="normal")
-    remove_button.config(state="normal")
-    update_button.config(state="normal")
-    update_all_button.config(state="normal")
-    search_entry.config(state="normal")
-
-
-def show_progress_bar(max_value):
-    frame_progress.pack(side="left")
-
-    progress_label.config(text = "Aggiornamento in corso...")
-
-    progress_bar["maximum"] = max_value
-    progress_bar["value"] = 0
-
-
-def hide_progress_bar():
-    frame_progress.pack_forget()
-
-
-def update_selected_prices():
+def open_progress_dialog(update_all = True):
     """
-    Aggiorna i prezzi dei prodotti selezionati e notifica eventuali cambiamenti.
+    Crea e mostra una finestra di dialogo modale con una barra di progresso per il processo di aggiornamento.
     """
-    # Resetta i filtri (se presenti)
-    reset_filters()
+    def update_prices_threaded(dialog, update_all = True):
+        """
+        Esegue l'aggiornamento dei prezzi in un thread separato e chiude la finestra di dialogo alla fine sbloccando la root.
+        """
+        def update_selected_prices(dialog):
+            """
+            Aggiorna i prezzi dei prodotti selezionati e notifica eventuali cambiamenti.
+            """
+            # Stop threads and stop update view
+            set_enable_update(False)
 
-    # Ottieni i prodotti selezionati nella TreeView
-    selected = products_tree.selection()
+            # Resetta i filtri (se presenti)
+            reset_filters()
 
-    if not selected:
-        logger.warning("Nessun prodotto selezionato per aggiornare il prezzo")
-        return
+            # Ottieni i prodotti selezionati nella TreeView
+            selected = products_tree.selection()
 
-    # Disabilita i controlli e mostra la barra di caricamento
-    disable_controls()
-    show_progress_bar(len(selected))
+            if not selected:
+                logger.warning("Nessun prodotto selezionato per aggiornare il prezzo")
+                return
 
-    updated_products = []
+            # Inizializza barra di caricamento
+            max_value = len(selected)
+            dialog.progress_bar["maximum"] = max_value
+            dialog.progress_bar["value"] = 0
 
-    # Itera sui prodotti selezionati per aggiornare i prezzi
-    for i, item in enumerate(selected):
-        name = item
-        current_price = get_price(products[name]['url'])
+            updated_products = []
 
-        if current_price is None:
-            logger.warning(f"Prodotto '{name}' non aggiornato: non trovato il prezzo sulla pagina {products[name]['url']}")
-            
-            # Aggiorna il prodotto con un messaggio di errore
-            products[name]['price'] = "Aggiorna o verifica url: - "
-            products[name]['timer'] = time.time()
-            products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            continue
+            # Itera sui prodotti selezionati per aggiornare i prezzi
+            for i, name in enumerate(selected):
+                # Aggiorna il progresso
+                dialog.progress_bar["value"] = i + 1
+                dialog.progress_label.config(text=f"Aggiornamento di {i + 1}/{max_value}...")
+                dialog.update_idletasks()  # Aggiorna l'interfaccia grafica
 
-        # Aggiorna il prezzo del prodotto
-        products[name]['price'] = current_price
-        products[name]['timer'] = time.time()
-        products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                current_price = get_price(products[name]['url'])
 
-        # Ottieni il prezzo precedente del prodotto
-        previous_price = get_last_price(name)
+                if current_price is None:
+                    logger.warning(f"Prodotto '{name}' non aggiornato: non trovato il prezzo sulla pagina {products[name]['url']}")
+                    
+                    # Aggiorna il prodotto con un messaggio di errore
+                    products[name]['price'] = "Aggiorna o verifica url: - "
+                    products[name]['timer'] = time.time()
+                    products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    continue
 
-        if previous_price is not None:
-            updated_products.append((name, previous_price, current_price, products[name]['notify']))
+                # Aggiorna il prezzo del prodotto
+                products[name]['price'] = current_price
+                products[name]['timer'] = time.time()
+                products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # Salva i dati dei prezzi aggiornati
-        save_prices_data(name, products[name]['price'])
+                # Ottieni il prezzo precedente del prodotto
+                previous_price = get_last_price(name)
 
-        # Aggiorna il progresso
-        progress_bar["value"] = i + 1
-        root.update_idletasks()  # Forza l'aggiornamento grafico della barra
+                if previous_price is not None:
+                    updated_products.append((name, previous_price, current_price, products[name]['notify']))
 
-    # Salva tutti i dati dei prodotti aggiornati
-    save_data()
+                # Salva i dati dei prezzi aggiornati
+                save_prices_data(name, products[name]['price'])
 
-    # Mostra un messaggio di stato per i prodotti aggiornati
-    if updated_products:
-        status_message = "Prezzi aggiornati per i seguenti prodotti:\n\n"
+            # Salva tutti i dati dei prodotti aggiornati
+            save_data()
 
-        for name, prev_price, curr_price, notify in updated_products:
-            if curr_price < prev_price:
-                status_message += f"{name}: Prezzo calato da {prev_price}€ a {curr_price}€\n"
-                if notify:
-                    send_notification_and_email(name, prev_price, curr_price)
-            elif curr_price > prev_price:
-                status_message += f"{name}: Prezzo aumentato da {prev_price}€ a {curr_price}€\n"
+            # Mostra un messaggio di stato per i prodotti aggiornati
+            if updated_products:
+                status_message = "Prezzi aggiornati per i seguenti prodotti:\n\n"
+
+                for name, prev_price, curr_price, notify in updated_products:
+                    if curr_price < prev_price:
+                        status_message += f"{name}: Prezzo calato da {prev_price}€ a {curr_price}€\n"
+                        if notify:
+                            send_notification_and_email(name, prev_price, curr_price)
+                    elif curr_price > prev_price:
+                        status_message += f"{name}: Prezzo aumentato da {prev_price}€ a {curr_price}€\n"
+                    else:
+                        status_message += f"{name}: Prezzo invariato a {curr_price}€\n"
+
+                messagebox.showinfo("Aggiornamento", status_message)
+                logger.info("I prodotti selezionati sono stati aggiornati")
             else:
-                status_message += f"{name}: Prezzo invariato a {curr_price}€\n"
+                messagebox.showwarning("Attenzione", "Nessun prezzo aggiornato!\nAggiornali nuovamente")
+                logger.warning("Nessun prodotto selezionato è stato aggiornato")
 
-        messagebox.showinfo("Aggiornamento", status_message)
-        logger.info("I prodotti selezionati sono stati aggiornati")
-    else:
-        messagebox.showwarning("Attenzione", "Nessun prezzo aggiornato!\nAggiornali nuovamente")
-        logger.warning("Nessun prodotto selezionato è stato aggiornato")
+            # Resume threads and resume update view
+            set_enable_update()
+
+        def update_all_prices(dialog):
+            """
+            Aggiorna i prezzi di tutti i prodotti e notifica eventuali cambiamenti.
+            """
+            # Stop threads and stop update view
+            set_enable_update(False)
+
+            # Resetta i filtri (se presenti)
+            reset_filters()
+
+            # Inizializza barra di caricamento
+            max_value = len(products)
+            dialog.progress_bar["maximum"] = max_value
+            dialog.progress_bar["value"] = 0
+
+            updated_products = []
+
+            # Itera su tutti i prodotti per aggiornare i prezzi
+            for i, name in enumerate(products):
+                # Aggiorna il progresso
+                dialog.progress_bar["value"] = i + 1
+                dialog.progress_label.config(text=f"Aggiornamento di {i + 1}/{max_value}...")
+                dialog.update_idletasks()  # Aggiorna l'interfaccia grafica
+
+                current_price = get_price(products[name]['url'])
+
+                if current_price is None:
+                    logger.warning(f"Prodotto '{name}' non aggiornato: non trovato il prezzo sulla pagina {products[name]['url']}")
+                    
+                    # Aggiorna il prodotto con un messaggio di errore
+                    products[name]['price'] = "Aggiorna o verifica url: - "
+                    products[name]['timer'] = time.time()
+                    products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    continue
+
+                # Aggiorna il prezzo del prodotto
+                products[name]['price'] = current_price
+                products[name]['timer'] = time.time()
+                products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+                # Ottieni il prezzo precedente del prodotto
+                previous_price = get_last_price(name)
+
+                if previous_price is not None:
+                    updated_products.append((name, previous_price, current_price, products[name]['notify']))
+
+                # Salva i dati dei prezzi aggiornati
+                save_prices_data(name, products[name]['price'])
+
+            # Salva tutti i dati dei prodotti aggiornati
+            save_data()
+
+            # Mostra un messaggio di stato per i prodotti aggiornati
+            if updated_products:
+                status_message = "Prezzi aggiornati per i seguenti prodotti:\n\n"
+
+                for name, prev_price, curr_price, notify in updated_products:
+                    if curr_price < prev_price:
+                        status_message += f"{name}: Prezzo calato da {prev_price}€ a {curr_price}€\n"
+                        if notify:
+                            send_notification_and_email(name, prev_price, curr_price)
+                    elif curr_price > prev_price:
+                        status_message += f"{name}: Prezzo aumentato da {prev_price}€ a {curr_price}€\n"
+                    else:
+                        status_message += f"{name}: Prezzo invariato a {curr_price}€\n"
+
+                messagebox.showinfo("Aggiornamento", status_message)
+                logger.info("Tutti i prodotti sono stati aggiornati")
+            else:
+                messagebox.showwarning("Attenzione", "Nessun prezzo aggiornato!\nAggiornali tutti nuovamente")
+                logger.warning("Nessun prodotto è stato aggiornato")
+
+            # Resume threads and resume update view
+            set_enable_update()
+
+        try:
+            if update_all:
+                update_all_prices(dialog)
+            else:
+                update_selected_prices(dialog)
+        finally:
+            dialog.destroy()
+            root.resizable(True, True)
+            root.wm_attributes("-disabled", False)
+
+    dialog = tk.Toplevel(root)
+    dialog.grab_set()  # Impedisce l'interazione con la finestra principale
+
+    # Rimuove completamente la barra del titolo (incluso il pulsante "X")
+    dialog.overrideredirect(True)
     
-    # Rimuove la barra di caricamento e abilita di nuovo i controlli
-    hide_progress_bar()
-    enable_controls()
+    # Disabilita il ridimensionamento della finestra
+    dialog.resizable(False, False)
 
+    # Blocca qualsiasi tentativo di ridimensionare o spostare la finestra principale
+    root.resizable(False, False)
+    
+    # Blocca lo spostamento della finestra principale
+    root.wm_attributes("-disabled", True)
 
-def update_all_prices():
-    """
-    Aggiorna i prezzi di tutti i prodotti e notifica eventuali cambiamenti.
-    """
-    # Resetta i filtri (se presenti)
-    reset_filters()
+    width = 300
+    height = 100
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    
+    position_x = int((screen_width / 2) - (width / 2))
+    position_y = int((screen_height / 2) - (height / 2))
+    
+    dialog.geometry(f"{width}x{height}+{position_x}+{position_y}")
 
-    # Disabilita i controlli e mostra la barra di caricamento
-    disable_controls()
-    show_progress_bar(len(products))
+    # Crea una barra di progresso e una label
+    progress_label = tk.Label(dialog, text="Inizio aggiornamento...")
+    progress_label.pack(pady=10)
+    progress_bar = ttk.Progressbar(dialog, orient="horizontal", length=250, mode="determinate")
+    progress_bar.pack(pady=10)
 
-    updated_products = []
+    # Aggiungi la barra di progresso e la label alla finestra di dialogo
+    dialog.progress_bar = progress_bar
+    dialog.progress_label = progress_label
 
-    # Itera su tutti i prodotti per aggiornare i prezzi
-    for i, name in enumerate(products):
-        current_price = get_price(products[name]['url'])
+    # Avvia l'aggiornamento in un thread separato
+    thread = threading.Thread(target=update_prices_threaded, args=(dialog, update_all))
+    thread.start()
 
-        if current_price is None:
-            logger.warning(f"Prodotto '{name}' non aggiornato: non trovato il prezzo sulla pagina {products[name]['url']}")
-            
-            # Aggiorna il prodotto con un messaggio di errore
-            products[name]['price'] = "Aggiorna o verifica url: - "
-            products[name]['timer'] = time.time()
-            products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            continue
-
-        # Aggiorna il prezzo del prodotto
-        products[name]['price'] = current_price
-        products[name]['timer'] = time.time()
-        products[name]['date_edited'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        # Ottieni il prezzo precedente del prodotto
-        previous_price = get_last_price(name)
-
-        if previous_price is not None:
-            updated_products.append((name, previous_price, current_price, products[name]['notify']))
-
-        # Salva i dati dei prezzi aggiornati
-        save_prices_data(name, products[name]['price'])
-
-        # Aggiorna il progresso
-        progress_bar["value"] = i + 1
-        root.update_idletasks()  # Forza l'aggiornamento grafico della barra
-
-    # Salva tutti i dati dei prodotti aggiornati
-    save_data()
-
-    # Mostra un messaggio di stato per i prodotti aggiornati
-    if updated_products:
-        status_message = "Prezzi aggiornati per i seguenti prodotti:\n\n"
-
-        for name, prev_price, curr_price, notify in updated_products:
-            if curr_price < prev_price:
-                status_message += f"{name}: Prezzo calato da {prev_price}€ a {curr_price}€\n"
-                if notify:
-                    send_notification_and_email(name, prev_price, curr_price)
-            elif curr_price > prev_price:
-                status_message += f"{name}: Prezzo aumentato da {prev_price}€ a {curr_price}€\n"
-            else:
-                status_message += f"{name}: Prezzo invariato a {curr_price}€\n"
-
-        messagebox.showinfo("Aggiornamento", status_message)
-        logger.info("Tutti i prodotti sono stati aggiornati")
-    else:
-        messagebox.showwarning("Attenzione", "Nessun prezzo aggiornato!\nAggiornali tutti nuovamente")
-        logger.warning("Nessun prodotto è stato aggiornato")
-
-    # Rimuove la barra di caricamento e abilita di nuovo i controlli
-    hide_progress_bar()
-    enable_controls()
+    # La finestra di dialogo rimane aperta finché il thread non termina
+    dialog.wait_window()
 
 
 def view_graph_for_product(product_name):
@@ -2086,12 +2119,52 @@ def periodic_update():
             add_button['state'] = "normal"
             update_all_button['state'] = "normal" if products_to_view else "disabled"
 
-    refresh_treeview()
+    if enable_update:
+        refresh_treeview()
 
-    update_buttons_state()
+        update_buttons_state()
 
-    # Richiama periodicamente questa funzione
-    root.after(500, periodic_update)  # Ogni 500 millisecondi
+        # Richiama periodicamente questa funzione
+        root.after(500, periodic_update)  # Ogni 500 millisecondi
+
+
+def set_enable_update(update = True):
+    def disable_controls():
+        add_button.config(state="disabled")
+        view_button.config(state="disabled")
+        edit_button.config(state="disabled")
+        remove_button.config(state="disabled")
+        update_button.config(state="disabled")
+        update_all_button.config(state="disabled")
+        search_entry.config(state="disabled")
+
+    def enable_controls():
+        add_button.config(state="normal")
+        view_button.config(state="normal")
+        edit_button.config(state="normal")
+        remove_button.config(state="normal")
+        update_button.config(state="normal")
+        update_all_button.config(state="normal")
+        search_entry.config(state="normal")
+
+    global enable_update
+
+    if update:
+        enable_controls()
+        enable_update = True
+
+        for name in products:
+            start_tracking(name, products[name]['url'])
+
+        periodic_update()
+        enable_controls()
+    else:
+        disable_controls()
+        enable_update = False
+
+        for name in products:
+            stop_events[name].set() # Segnala al thread corrente di fermarsi
+            threads[name].join(timeout=1) # Aspetta che il thread corrente termini
 
 
 # Configurazioni
@@ -2117,10 +2190,13 @@ common_font = ('Arial', 10)
 
 current_index = None
 
+enable_update = True
+
 # Creazione della finestra principale
 root = tk.Tk()
 root.title("Monitoraggio Prezzi Amazon")
 root.minsize(1300, 300)
+root.wm_state("zoomed")
 
 # Limita la lunghezza dell'input
 limit_letters = (root.register(lambda s: len(s) <= 50), '%P')
@@ -2149,16 +2225,16 @@ remove_button.grid(row=2, column=3, padx=5, pady=5, sticky="we")
 ttk.Label(input_frame, text="", width=18).grid(row=2, column=4, padx=5, pady=5, sticky="we")
 
 # Bottone Aggiorna Selezionati
-update_button = ttk.Button(input_frame, text="Aggiorna Selezionati", command=update_selected_prices, state="disabled")
+update_button = ttk.Button(input_frame, text="Aggiorna Selezionati", command=lambda:open_progress_dialog(False), state="disabled")
 update_button.grid(row=2, column=5, padx=5, pady=5, sticky="e")
 
 # Bottone Aggiorna Tutti
-update_all_button = ttk.Button(input_frame, text="Aggiorna Tutti", command=update_all_prices, state="disabled")
+update_all_button = ttk.Button(input_frame, text="Aggiorna Tutti", command=lambda:open_progress_dialog(), state="disabled")
 update_all_button.grid(row=2, column=6, padx=5, pady=5, sticky="e")
 
 # Setup della barra di ricerca
 search_frame = ttk.Frame(root)
-search_frame.pack(fill="x", padx=5, pady=5)
+search_frame.pack(fill="x", padx=5, pady=0)
 
 ttk.Label(search_frame, text="Ricerca Prodotto:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
 search_entry = ttk.Entry(search_frame, width=80, font=common_font, validate='key', validatecommand=limit_letters)
@@ -2183,21 +2259,10 @@ scrollbar.pack(side="right", fill="y")
 
 # Frame per la barra di progresso e la label
 frame_footer = tk.Frame(root)
-frame_footer.pack(side="bottom", fill="x", padx=(20, 40), pady=5)
-
-frame_progress = tk.Frame(frame_footer)
-frame_progress.pack(side="left")
-
-progress_label = tk.Label(frame_progress, text="Aggiornamento in corso...", font=("Arial", 8))
-progress_label.pack(side="left", padx=5)
-
-progress_bar = ttk.Progressbar(frame_progress, orient="horizontal", length=150, mode="determinate")
-progress_bar.pack(side="right")
+frame_footer.pack(side="bottom", fill="x", padx=(20, 40), pady=2)
 
 creator_label = tk.Label(frame_footer, text="Prodotto da Vincenzo Salvati", font=("Arial", 8))
 creator_label.pack(side="right")
-
-hide_progress_bar()
 
 # Menu contestuale per la singola selezione
 single_selection_menu = tk.Menu(root, tearoff=0)
@@ -2208,7 +2273,7 @@ single_selection_menu.add_command(label="Rimuovi prodotto", command=remove_produ
 # Menu contestuale per selezione multipla
 multi_selection_menu = tk.Menu(root, tearoff=0)
 multi_selection_menu.add_command(label="Rimuovi selezionati", command=remove_products)
-multi_selection_menu.add_command(label="Aggiorna selezionati", command=update_selected_prices)
+multi_selection_menu.add_command(label="Aggiorna selezionati", command=lambda:open_progress_dialog(False))
 
 # Binding degli eventi
 products_tree.bind("<Double-1>", show_product_details)
