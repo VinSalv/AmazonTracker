@@ -1711,6 +1711,7 @@ def show_product_details(event=None):
                         window.attributes("-disabled", True)  # Disabilita la finestra Tkinter
                     except:
                         pass
+
                 root.attributes("-disabled", True)
 
             def enable_tkinter_windows(root):
@@ -1720,6 +1721,7 @@ def show_product_details(event=None):
                         window.attributes("-disabled", False)  # Riabilita la finestra Tkinter
                     except:
                         pass
+
                 root.attributes("-disabled", False)
 
             global panel_prices
