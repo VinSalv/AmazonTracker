@@ -1704,6 +1704,24 @@ def show_product_details(event=None):
                 
                 return fig
 
+            def disable_tkinter_windows(root):
+                """Disabilita tutte le finestre di Tkinter."""
+                for window in root.winfo_children():
+                    try:
+                        window.attributes("-disabled", True)  # Disabilita la finestra Tkinter
+                    except:
+                        pass
+                root.attributes("-disabled", True)
+
+            def enable_tkinter_windows(root):
+                """Riabilita tutte le finestre di Tkinter."""
+                for window in root.winfo_children():
+                    try:
+                        window.attributes("-disabled", False)  # Riabilita la finestra Tkinter
+                    except:
+                        pass
+                root.attributes("-disabled", False)
+
             global panel_prices
 
             # Crea una nuova applicazione PyQt5 solo se non esiste già
@@ -1722,10 +1740,13 @@ def show_product_details(event=None):
                 temp_file.flush()
                 temp_file_path = temp_file.name
 
-            # Crea una finestra principale
+            # Disabilita tutte le finestre di Tkinter
+            disable_tkinter_windows(root)
+
+            # Crea una finestra principale di PyQt5
             qMainWindow = QMainWindow()
             qMainWindow.setWindowTitle(f'Grafico Prezzi - {product_name}')
-
+            
             # Crea un widget centrale e un layout
             central_widget = QWidget()
             qVBoxLayout = QVBoxLayout(central_widget)
@@ -1736,15 +1757,21 @@ def show_product_details(event=None):
             web_view.setUrl(QUrl.fromLocalFile(temp_file_path))
             qVBoxLayout.addWidget(web_view)
 
-            # Mostra la finestra
+            # Mostra la finestra e disabilita l'interazione con il resto dell'app
             qMainWindow.resize(800, 600)
+            qMainWindow.setWindowModality(2)  # Imposta la finestra in modalità applicazione (blocco finestra Tkinter)
             qMainWindow.show()
+
+            # Connetti il segnale di chiusura per riabilitare le finestre Tkinter
+            def on_close():
+                enable_tkinter_windows(root)  # Riabilita tutte le finestre Tkinter quando la finestra viene chiusa
+                os.remove(temp_file_path)     # Pulisci il file temporaneo
+                qMainWindow.close()           # Chiudi la finestra principale
+
+            qMainWindow.closeEvent = lambda event: on_close()
 
             # Avvia l'applicazione se non è già in esecuzione
             panel_prices.exec_()
-
-            # Pulisci il file temporaneo
-            os.remove(temp_file_path)
 
         try:
             # Stop threads and stop update view
