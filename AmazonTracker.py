@@ -357,10 +357,10 @@ def start_tracking(name, url):
             
         # Ciclo di monitoraggio
         while not stop_events[name].is_set():  # Continua finché l'evento non è settato
+            products[name]['timer'] = time.time()
             if stop_events[name].wait(products[name]['timer_refresh']):
                 break  # Esce immediatamente se l'evento è settato durante il wait
             check_price_and_notify(name, url)
-            products[name]['timer'] = time.time()
             reset_filters()
 
         logger.info(f"Monitoraggio di '{name}' fermato")
@@ -1350,12 +1350,6 @@ def open_progress_dialog(update_all = True):
             """
             Aggiorna i prezzi dei prodotti selezionati e notifica eventuali cambiamenti.
             """
-            # Stop threads and stop update view
-            set_enable_update(False)
-
-            # Resetta i filtri (se presenti)
-            reset_filters()
-
             # Ottieni i prodotti selezionati nella TreeView
             selected = products_tree.selection()
 
@@ -1425,19 +1419,10 @@ def open_progress_dialog(update_all = True):
                 messagebox.showwarning("Attenzione", "Nessun prezzo aggiornato!\nAggiornali nuovamente")
                 logger.warning("Nessun prodotto selezionato è stato aggiornato")
 
-            # Resume threads and resume update view
-            set_enable_update()
-
         def update_all_prices(dialog):
             """
             Aggiorna i prezzi di tutti i prodotti e notifica eventuali cambiamenti.
             """
-            # Stop threads and stop update view
-            set_enable_update(False)
-
-            # Resetta i filtri (se presenti)
-            reset_filters()
-
             # Inizializza barra di caricamento
             max_value = len(products)
             dialog.progress_bar["maximum"] = max_value
@@ -1500,16 +1485,28 @@ def open_progress_dialog(update_all = True):
                 messagebox.showwarning("Attenzione", "Nessun prezzo aggiornato!\nAggiornali tutti nuovamente")
                 logger.warning("Nessun prodotto è stato aggiornato")
 
-            # Resume threads and resume update view
-            set_enable_update()
-
         try:
+            # Stop threads and stop update view
+            set_enable_update(False)
+
+            # Resetta i filtri (se presenti)
+            reset_filters()
+
+            root.resizable(False, False) # Blocca qualsiasi tentativo di ridimensionare o spostare la finestra principale
+            root.wm_attributes("-disabled", True) # Blocca lo spostamento della finestra principale
+
             if update_all:
                 update_all_prices(dialog)
             else:
                 update_selected_prices(dialog)
         finally:
+            # Resume threads and resume update view
+            set_enable_update()
+
+            reset_timers()
+            
             dialog.destroy()
+
             root.resizable(True, True)
             root.wm_attributes("-disabled", False)
 
@@ -1521,12 +1518,6 @@ def open_progress_dialog(update_all = True):
     
     # Disabilita il ridimensionamento della finestra
     dialog.resizable(False, False)
-
-    # Blocca qualsiasi tentativo di ridimensionare o spostare la finestra principale
-    root.resizable(False, False)
-    
-    # Blocca lo spostamento della finestra principale
-    root.wm_attributes("-disabled", True)
 
     width = 300
     height = 100
@@ -1554,97 +1545,6 @@ def open_progress_dialog(update_all = True):
 
     # La finestra di dialogo rimane aperta finché il thread non termina
     dialog.wait_window()
-
-
-def view_graph_for_product(product_name):
-    """
-    Visualizza un grafico dei prezzi per un prodotto specifico.
-    
-    Args:
-        product_name (str): Il nome del prodotto di cui visualizzare il grafico.
-    """
-    def create_graph_for_product(product_name):
-        """
-        Crea un grafico dei prezzi per un prodotto specifico.
-        
-        Args:
-            product_name (str): Il nome del prodotto di cui creare il grafico.
-        
-        Returns:
-            fig (plotly.graph_objects.Figure): Il grafico creato.
-        """
-        # Verifica se il prodotto esiste nei dati
-        if product_name not in prices:
-            raise ValueError(f"Prodotto '{product_name}' non trovato in prices")
-
-        # Prepara il DataFrame per il prodotto specificato
-        df = pd.DataFrame(prices[product_name])
-        df['date'] = pd.to_datetime(df['date'])
-
-        # Crea una figura
-        fig = go.Figure()
-
-        # Aggiungi la traccia per il prodotto specificato
-        fig.add_trace(go.Scatter(
-            x=df['date'],
-            y=df['price'],
-            mode='lines+markers',
-            name=product_name,
-            hovertemplate='Date: %{x}<br>Price: %{y}<extra></extra>'
-        ))
-
-        # Aggiorna il layout della figura
-        fig.update_layout(
-            title=f'Prezzi del Prodotto: {product_name}',
-            xaxis_title='Data',
-            yaxis_title='Prezzo',
-            xaxis=dict(type='date'),
-            hovermode='x'
-        )
-        
-        return fig
-
-    global panel_prices
-
-    # Crea una nuova applicazione PyQt5 solo se non esiste già
-    if panel_prices is None:
-        panel_prices = QApplication([])
-
-    # Crea la figura per il prodotto specificato
-    fig = create_graph_for_product(product_name)
-    
-    # Salva la figura come stringa HTML
-    html_str = pio.to_html(fig, full_html=True)
-    
-    # Crea un file HTML temporaneo
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.html') as temp_file:
-        temp_file.write(html_str.encode('utf-8'))
-        temp_file.flush()
-        temp_file_path = temp_file.name
-
-    # Crea una finestra principale
-    qMainWindow = QMainWindow()
-    qMainWindow.setWindowTitle(f'Grafico Prezzi - {product_name}')
-
-    # Crea un widget centrale e un layout
-    central_widget = QWidget()
-    qVBoxLayout = QVBoxLayout(central_widget)
-    qMainWindow.setCentralWidget(central_widget)
-
-    # Crea un QWebEngineView e carica il file HTML temporaneo
-    web_view = QWebEngineView()
-    web_view.setUrl(QUrl.fromLocalFile(temp_file_path))
-    qVBoxLayout.addWidget(web_view)
-
-    # Mostra la finestra
-    qMainWindow.resize(800, 600)
-    qMainWindow.show()
-
-    # Avvia l'applicazione se non è già in esecuzione
-    panel_prices.exec_()
-
-    # Pulisci il file temporaneo
-    os.remove(temp_file_path)
 
 
 def sort_by_column(col_idx):
@@ -1755,6 +1655,108 @@ def show_product_details(event=None):
     Args:
         event (tk.Event, opzionale): Evento che può scatenare la selezione. Non utilizzato in questa funzione.
     """
+    def open_view_graph_panel(product_name):
+        def view_graph_for_product(product_name):
+            """
+            Visualizza un grafico dei prezzi per un prodotto specifico.
+            
+            Args:
+                product_name (str): Il nome del prodotto di cui visualizzare il grafico.
+            """
+            def create_graph_for_product(product_name):
+                """
+                Crea un grafico dei prezzi per un prodotto specifico.
+                
+                Args:
+                    product_name (str): Il nome del prodotto di cui creare il grafico.
+                
+                Returns:
+                    fig (plotly.graph_objects.Figure): Il grafico creato.
+                """
+                # Verifica se il prodotto esiste nei dati
+                if product_name not in prices:
+                    raise ValueError(f"Prodotto '{product_name}' non trovato in prices")
+
+                # Prepara il DataFrame per il prodotto specificato
+                df = pd.DataFrame(prices[product_name])
+                df['date'] = pd.to_datetime(df['date'])
+
+                # Crea una figura
+                fig = go.Figure()
+
+                # Aggiungi la traccia per il prodotto specificato
+                fig.add_trace(go.Scatter(
+                    x=df['date'],
+                    y=df['price'],
+                    mode='lines+markers',
+                    name=product_name,
+                    hovertemplate='Date: %{x}<br>Price: %{y}<extra></extra>'
+                ))
+
+                # Aggiorna il layout della figura
+                fig.update_layout(
+                    title=f'Prezzi del Prodotto: {product_name}',
+                    xaxis_title='Data',
+                    yaxis_title='Prezzo',
+                    xaxis=dict(type='date'),
+                    hovermode='x'
+                )
+                
+                return fig
+
+            global panel_prices
+
+            # Crea una nuova applicazione PyQt5 solo se non esiste già
+            if panel_prices is None:
+                panel_prices = QApplication([])
+
+            # Crea la figura per il prodotto specificato
+            fig = create_graph_for_product(product_name)
+            
+            # Salva la figura come stringa HTML
+            html_str = pio.to_html(fig, full_html=True)
+            
+            # Crea un file HTML temporaneo
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.html') as temp_file:
+                temp_file.write(html_str.encode('utf-8'))
+                temp_file.flush()
+                temp_file_path = temp_file.name
+
+            # Crea una finestra principale
+            qMainWindow = QMainWindow()
+            qMainWindow.setWindowTitle(f'Grafico Prezzi - {product_name}')
+
+            # Crea un widget centrale e un layout
+            central_widget = QWidget()
+            qVBoxLayout = QVBoxLayout(central_widget)
+            qMainWindow.setCentralWidget(central_widget)
+
+            # Crea un QWebEngineView e carica il file HTML temporaneo
+            web_view = QWebEngineView()
+            web_view.setUrl(QUrl.fromLocalFile(temp_file_path))
+            qVBoxLayout.addWidget(web_view)
+
+            # Mostra la finestra
+            qMainWindow.resize(800, 600)
+            qMainWindow.show()
+
+            # Avvia l'applicazione se non è già in esecuzione
+            panel_prices.exec_()
+
+            # Pulisci il file temporaneo
+            os.remove(temp_file_path)
+
+        try:
+            # Stop threads and stop update view
+            set_enable_update(False)
+
+            view_graph_for_product(product_name)
+
+        finally:
+                # Resume threads and resume update view
+                set_enable_update()
+
+
     def copy_to_clipboard(text, show_info=False):
         """
         Copia il testo negli appunti.
@@ -1820,7 +1822,7 @@ def show_product_details(event=None):
     name_label.grid(row=0, column=0, sticky='w')
 
     # Pulsante per visualizzare il grafico
-    view_graph_button = ttk.Button(top_frame, text="Visualizza Grafico", command=lambda: view_graph_for_product(product_name))
+    view_graph_button = ttk.Button(top_frame, text="Visualizza Grafico", command=lambda: open_view_graph_panel(product_name))
     view_graph_button.grid(row=0, column=1, sticky='e')
 
     # URL del prodotto
@@ -2157,20 +2159,29 @@ def set_enable_update(update = True):
 
     if update:
         enable_controls()
+
         enable_update = True
 
-        for name in products:
-            start_tracking(name, products[name]['url'])
+        reset_timers()
 
         periodic_update()
+
         enable_controls()
     else:
         disable_controls()
+
         enable_update = False
 
         for name in products:
             stop_events[name].set() # Segnala al thread corrente di fermarsi
             threads[name].join(timeout=1) # Aspetta che il thread corrente termini
+
+
+def reset_timers():
+    for name in products:
+        start_tracking(name, products[name]['url'])
+
+    save_data()
 
 
 # Configurazioni
@@ -2296,11 +2307,6 @@ root.bind("<Button-1>", clear_selected_products)
 # Carica dati
 load_data()
 load_prices_data()
-
-# Reset dei timer
-for name in products:
-    products[name]['timer'] = time.time()
-save_data()
 
 # Avvia l'aggiornamento periodico
 periodic_update()
