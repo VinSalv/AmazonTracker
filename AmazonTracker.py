@@ -630,22 +630,20 @@ def open_add_product_dialog():
         if typed_text:
             # Trova i nomi dei prodotti che corrispondono al testo digitato
             matching_suggestions = [name for name in prices.keys() if typed_text in name.lower()]
-            
+
             listbox_suggestions.insert(tk.END, name_entry.get())
             for suggestion in matching_suggestions:
                 listbox_suggestions.insert(tk.END, suggestion)
+            
+            # Configura l'altezza della Listbox e la posiziona sotto l'Entry
+            listbox_suggestions.config(height=min(len(matching_suggestions), 5))
+            x = name_entry.winfo_x()
+            y = name_entry.winfo_y() + name_entry.winfo_height()
+            listbox_frame.place(x=x, y=y, anchor="nw")
+            listbox_suggestions.lift()
 
-            if matching_suggestions:
-                # Configura l'altezza della Listbox e la posiziona sotto l'Entry
-                listbox_suggestions.config(height=min(len(matching_suggestions), 5))
-                x = name_entry.winfo_x()
-                y = name_entry.winfo_y() + name_entry.winfo_height()
-                listbox_suggestions.place(x=x, y=y, anchor="nw")
-                listbox_suggestions.lift()
-            else:
-                listbox_suggestions.place_forget()
         else:
-            listbox_suggestions.place_forget()
+            listbox_frame.place_forget()
 
     def on_select_suggestion(event):
         """
@@ -895,16 +893,24 @@ def open_add_product_dialog():
     ttk.Label(container, text="Nome Prodotto:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
 
     name_entry_var = tk.StringVar()
-    name_entry_var.trace('w', update_suggestions)
+    name_entry_var.trace_add('write', update_suggestions)
 
     name_entry = ttk.Entry(container, width=80, font=common_font, textvariable=name_entry_var, validate='key', validatecommand=limit_letters)
     name_entry.grid(row=0, column=1, padx=10, pady=10, sticky='w')
     name_entry.bind("<Button-3>", lambda e: show_text_menu(e, name_entry))
 
-    # Listbox per suggerimenti
-    listbox_suggestions = tk.Listbox(add_product_dialog, width=80)
+    # Frame per Listbox e Scrollbar
+    listbox_frame = ttk.Frame(add_product_dialog)
+    listbox_frame.place_forget()
+
+    listbox_suggestions = tk.Listbox(listbox_frame, width=80)
+    listbox_suggestions.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     listbox_suggestions.bind("<<ListboxSelect>>", on_select_suggestion)
-    listbox_suggestions.place_forget()
+
+    scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical", command=listbox_suggestions.yview)
+    scrollbar.pack(side="right", fill="y")
+
+    listbox_suggestions.config(yscrollcommand=scrollbar.set)
 
     # Associa eventi di movimento del mouse
     name_entry.bind("<FocusIn>", on_entry_focus_in)
@@ -1177,7 +1183,7 @@ def open_edit_product_dialog():
     ttk.Label(container, text="Nome Prodotto:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
     
     # Creazione di un tk.Text per il testo selezionabile
-    text_widget = tk.Text(container, font=common_font, height=1, width=len(selected_name), wrap='none', bd=0, bg='white')
+    text_widget = tk.Text(container, font=common_font, height=1, width=80, wrap='none', bd=0, bg='white')
     text_widget.insert(tk.END, selected_name)
     text_widget.grid(row=0, column=1, padx=10, pady=10, sticky="w")
     text_widget.bind("<Button-3>", lambda e: show_text_menu(e, text_widget, True))
@@ -1192,7 +1198,7 @@ def open_edit_product_dialog():
     text_frame.grid(row=1, column=1, padx=10, pady=10, sticky="we")
     
     # Crea il widget Text
-    url_text = tk.Text(text_frame, height=5, width=80)
+    url_text = tk.Text(text_frame, height=5, width=80, font=common_font)
     url_text.pack(side="left", fill="both", expand=True)
     url_text.insert("1.0", selected_url)
     url_text.bind("<Button-3>", lambda e: show_text_menu(e, url_text))
@@ -1823,7 +1829,7 @@ def show_product_details(event=None):
     url_label.grid(row=1, column=0, sticky='w')
     url_label.bind("<Button-1>", lambda e: webbrowser.open(url))
 
-    copy_image_label = ttk.Button(top_frame, text="Copia url", command=lambda:copy_to_clipboard(url))
+    copy_image_label = ttk.Button(top_frame, text="Copia Url", command=lambda:copy_to_clipboard(url))
     copy_image_label.grid(row=1, column=1, sticky='e')
 
     # Frame per le informazioni sui prezzi
