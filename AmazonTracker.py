@@ -1765,12 +1765,14 @@ def show_product_details(event=None):
             qMainWindow.show()
 
             # Connetti il segnale di chiusura per riabilitare le finestre Tkinter
-            def on_close():
+            def on_close(event):
                 enable_tkinter_windows(root)  # Riabilita tutte le finestre Tkinter quando la finestra viene chiusa
                 os.remove(temp_file_path)     # Pulisci il file temporaneo
-                qMainWindow.close()           # Chiudi la finestra principale
+                web_view.setParent(None)      # Rimuovi esplicitamente il widget QWebEngineView
+                web_view.deleteLater()        # Rilascia correttamente le risorse del QWebEngineView
+                panel_prices.quit()           # Chiudi la finestra principale
 
-            qMainWindow.closeEvent = lambda event: on_close()
+            qMainWindow.closeEvent = on_close
 
             # Avvia l'applicazione se non è già in esecuzione
             panel_prices.exec_()
