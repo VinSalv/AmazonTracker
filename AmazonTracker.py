@@ -1226,9 +1226,13 @@ def remove_products():
 
         # Ciclo sui prodotti selezionati per rimuoverli
         for name in selected_products:
-            del products[name]
-            save_products_data()
+            # Ferma il monitoraggio del prodotto
             stop_tracking(name)
+            
+            # Rimozione prodotto
+            del products[name]
+
+            save_products_data()
 
             logger.info(f"Prodotto '{name}' rimosso con successo")
 
@@ -1839,8 +1843,6 @@ def set_periodic_refresh_root(update=True):
         """
         for name in products:
             start_tracking(name, products[name]["url"])
-
-        save_products_data()
 
     def stop_threads():
         """
