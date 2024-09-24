@@ -1907,7 +1907,7 @@ is_possible_to_refresh_root = True
 # Interfaccia principale
 root = tk.Tk()
 root.title("Monitoraggio Prezzi Amazon")
-root.minsize(1600, 500)
+root.minsize(1700, 500)
 root.wm_state("zoomed")
 
 limit_letters = (root.register(lambda s: len(s) <= 50), "%P") # Regola per limitare i caratteri da inserire
@@ -1948,19 +1948,30 @@ search_entry.bind("<KeyRelease>", lambda e: update_products_to_view())
 search_entry.bind("<Button-3>", lambda e: show_text_menu(e, search_entry))
 
 # Lista prodotti
-frame_products_tree = tk.Frame(root)
-frame_products_tree.pack(fill="both", expand=True, padx=(15, 10), pady=(10, 0))
+frame_products_list = tk.Frame(root)
+frame_products_list.pack(fill="both", expand=True, padx=(15, 10), pady=(10, 0))
 
-products_tree = ttk.Treeview(frame_products_tree, columns=columns, show="headings", selectmode="none")
+frame_products_tree_and_scrollbar_vertical = tk.Frame(frame_products_list)
+frame_products_tree_and_scrollbar_vertical.pack(fill="both", expand=True)
+
+products_tree = ttk.Treeview(frame_products_tree_and_scrollbar_vertical, columns=columns, show="headings", selectmode="none")
 products_tree.pack(side="left", fill="both", expand=True)
 
-for idx, col in enumerate(columns):
-    products_tree.heading(col, text=col, anchor="center", command=lambda _idx=idx: sort_by_column(_idx))
-    products_tree.column(col, width=80 if col in ["Notifica"] else 200, anchor="center" if col in ["Prezzo", "Notifica", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica"] else "w")
+for col in columns:
+    products_tree.heading(col, text=col, anchor="center", command=lambda _col=col: sort_by_column(_col))
+    products_tree.column(col, 
+                         width=100 if col == "Notifica" else 150 if col == "Timer" else 270 if col == "Nome" else 240 if col == "URL" else 230 if col == "Prezzo" else 210, 
+                         anchor="center" if col in ["Prezzo", "Notifica", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica"] else "w", 
+                         stretch=False)
 
-scrollbar = ttk.Scrollbar(frame_products_tree, orient="vertical", command=products_tree.yview)
-scrollbar.pack(side="right", fill="y")
-products_tree.configure(yscrollcommand=scrollbar.set)
+scrollbar_vertical = ttk.Scrollbar(frame_products_tree_and_scrollbar_vertical, orient="vertical", command=products_tree.yview)
+scrollbar_vertical.pack(side="right", fill="y")
+products_tree.configure()
+
+scrollbar_horizontal = ttk.Scrollbar(frame_products_list, orient="horizontal", command=products_tree.xview)
+scrollbar_horizontal.pack(side="bottom", fill="x", padx=(0, 20))
+
+products_tree.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=scrollbar_horizontal.set)
 
 # Footer
 frame_footer = tk.Frame(root)
