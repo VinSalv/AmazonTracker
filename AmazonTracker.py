@@ -39,7 +39,7 @@ logger.addHandler(logger_handler)
 
 def load_products_data():
     """
-    Carica i dati degli articoli da file e avvia il monitoraggio per ogni prodotto
+    Carica i dati dei prodotti da file e avvia il monitoraggio per ogni prodotto
     """
     global products, products_to_view
 
@@ -66,8 +66,8 @@ def load_products_data():
 
                 logger.info("Dati dei prodotti caricati correttamente")
         except Exception as e:
-            logger.error(f"Errore durante il caricamento dei dati articoli: {e}")
-            messagebox.showerror("Attenzione", "Errore durante il caricamento dei dati articoli")
+            logger.error(f"Errore durante il caricamento dei dati prodotti: {e}")
+            messagebox.showerror("Attenzione", "Errore durante il caricamento dei dati prodotti")
             exit()
     else:
         try:
@@ -97,9 +97,9 @@ def save_products_data():
         with open(products_file, "w") as file:
             json.dump(products, file, indent=4)
 
-        logger.info("Dati articoli salvati con successo")
+        logger.info("Dati prodotti salvati con successo")
     except Exception as e:
-        logger.error(f"Errore nel salvataggio dei dati articoli: {e}")
+        logger.error(f"Errore nel salvataggio dei dati prodotti: {e}")
 
 
 def load_prices_data():
@@ -758,7 +758,7 @@ def open_add_product_dialog():
                 return False
             
             if url == products[existing_name]["url"]:
-                messagebox.showwarning("Attenzione", "Questo articolo è già in monitoraggio!\nCambia url")
+                messagebox.showwarning("Attenzione", "Questo prodotto è già in monitoraggio!\nCambia url")
                 return False
         
         # Ricerca prezzo
@@ -1088,7 +1088,7 @@ def open_edit_product_dialog():
         if current_url != new_url:
             for existing_name in products:
                 if new_url == products[existing_name]["url"]:
-                    messagebox.showwarning("Attenzione", "Questo articolo è già in monitoraggio!\nCambia l'URL")
+                    messagebox.showwarning("Attenzione", "Questo prodotto è già in monitoraggio!\nCambia l'URL")
                     return False
 
         # Ricerca prezzo aggiornato
@@ -1416,7 +1416,7 @@ def show_text_menu(event, widget, onlyRead=False):
 
     def copy_text(widget):
         """
-        Copia il testo selezionato nel widget o, se è una Label, copia il testo visualizzato
+        Copia il testo selezionato nel widget
         """
         try:
             widget.event_generate("<<Copy>>")
@@ -1905,7 +1905,7 @@ is_possible_to_refresh_root = True
 # Interfaccia principale
 root = tk.Tk()
 root.title("Monitoraggio Prezzi Amazon")
-root.minsize(1300, 300)
+root.minsize(1600, 500)
 root.wm_state("zoomed")
 
 limit_letters = (root.register(lambda s: len(s) <= 50), "%P") # Regola per limitare i caratteri da inserire
