@@ -1473,13 +1473,11 @@ def show_text_menu(event, widget, onlyRead=False):
     text_menu.tk_popup(event.x_root, event.y_root)
 
 
-def sort_by_column(col_idx):
+def sort_by_column(column_name):
     """
     Ordinamento dei prodotti visualizzati nella TreeView in base alla colonna selezionata
     """
     global products_to_view
-
-    column_name = columns[col_idx]
 
     # Cambio del tipo di ordinamento (ascendente, discendente, nessuno) quando la colonna è la stessa ordinata precedentemente
     if sort_state["column"] == column_name:
@@ -1572,6 +1570,20 @@ def click(event):
             products_tree.selection_remove(*selected_products)
 
             current_index = None
+
+
+def double_click(event):
+    """
+    Visualizza dettagli prodotto quando si clicca due volte su un prodotto
+    """
+    products_in_tree_view = products_tree.get_children()
+
+    # Identifica il prodotto cliccato (basato sulla posizione y del click)
+    identified_product_index = products_tree.identify_row(event.y)
+
+    # Seleziona o deseleziona un prodotto in base a se è stato cliccato o meno
+    if identified_product_index in products_in_tree_view:
+        show_product_details()
 
 
 def shift_click(event):
@@ -1724,6 +1736,26 @@ def show_tree_view_menu(event):
             current_index = None
 
 
+def update_tree_view_columns_width(event=None):
+    """
+    Aggiorna la larghezza delle colonne della TreeView al variare della dimensione della finestra
+    """
+    # Ottieni la larghezza della finestra root
+    current_root_width = root.winfo_width()
+    
+    # Evita l'adattamento delle colonne in caso la Root divenga troppo piccola
+    if current_root_width >= 1550:
+        # Ottieni la larghezza disponibile a partire da quella della Root
+        available_width = int(current_root_width * 0.95)
+        
+        # Controlla che la larghezza sia maggiore di zero
+        if available_width > 0:
+            # Imposta la larghezza di ciascuna colonna basata sulla percentuale
+            for i, col in enumerate(columns):
+                col_width = int(available_width * column_width_percentages[i])  # Calcola la larghezza
+                products_tree.column(col, width=col_width)
+
+
 def periodic_refresh_root():
     """
     Aggiornamento periodico della Root
@@ -1867,16 +1899,8 @@ def set_periodic_refresh_root(update=True):
 
 
 # Variabili globali
-columns = (
-    "Nome",
-    "URL",
-    "Prezzo",
-    "Notifica",
-    "Timer",
-    "Timer Aggiornamento [s]",
-    "Data Inserimento",
-    "Data Ultima Modifica",
-)
+columns = ("Nome", "URL", "Prezzo", "Notifica", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica")
+column_width_percentages = [0.210, 0.175, 0.135, 0.055, 0.075, 0.12, 0.115, 0.115]
 
 config_file = "config.json"
 
@@ -1907,7 +1931,7 @@ is_possible_to_refresh_root = True
 # Interfaccia principale
 root = tk.Tk()
 root.title("Monitoraggio Prezzi Amazon")
-root.minsize(1700, 500)
+root.minsize(900, 300)
 root.wm_state("zoomed")
 
 limit_letters = (root.register(lambda s: len(s) <= 50), "%P") # Regola per limitare i caratteri da inserire
@@ -1942,34 +1966,30 @@ search_frame.pack(fill="x", padx=5, pady=0)
 
 ttk.Label(search_frame, text="Ricerca Prodotto:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
 
-search_entry = ttk.Entry(search_frame, width=80, font=common_font, validate="key", validatecommand=limit_letters)
+search_entry = ttk.Entry(search_frame, width=79, font=common_font, validate="key", validatecommand=limit_letters)
 search_entry.grid(row=0, column=1, padx=10, pady=10, sticky="we")
-search_entry.bind("<KeyRelease>", lambda e: update_products_to_view())
-search_entry.bind("<Button-3>", lambda e: show_text_menu(e, search_entry))
 
 # Lista prodotti
 frame_products_list = tk.Frame(root)
 frame_products_list.pack(fill="both", expand=True, padx=(15, 10), pady=(10, 0))
 
-frame_products_tree_and_scrollbar_vertical = tk.Frame(frame_products_list)
-frame_products_tree_and_scrollbar_vertical.pack(fill="both", expand=True)
-
-products_tree = ttk.Treeview(frame_products_tree_and_scrollbar_vertical, columns=columns, show="headings", selectmode="none")
-products_tree.pack(side="left", fill="both", expand=True)
+products_tree = ttk.Treeview(frame_products_list, columns=columns, show="headings", selectmode="none")
+products_tree.grid(row=0, column=0, sticky="nsew")  # Posiziona la Treeview nella griglia
 
 for col in columns:
     products_tree.heading(col, text=col, anchor="center", command=lambda _col=col: sort_by_column(_col))
-    products_tree.column(col, 
-                         width=100 if col == "Notifica" else 150 if col == "Timer" else 270 if col == "Nome" else 240 if col == "URL" else 230 if col == "Prezzo" else 210, 
+    products_tree.column(col,
                          anchor="center" if col in ["Prezzo", "Notifica", "Timer", "Timer Aggiornamento [s]", "Data Inserimento", "Data Ultima Modifica"] else "w", 
                          stretch=False)
-
-scrollbar_vertical = ttk.Scrollbar(frame_products_tree_and_scrollbar_vertical, orient="vertical", command=products_tree.yview)
-scrollbar_vertical.pack(side="right", fill="y")
-products_tree.configure()
+    
+scrollbar_vertical = ttk.Scrollbar(frame_products_list, orient="vertical", command=products_tree.yview)
+scrollbar_vertical.grid(row=0, column=1, sticky="ns")
 
 scrollbar_horizontal = ttk.Scrollbar(frame_products_list, orient="horizontal", command=products_tree.xview)
-scrollbar_horizontal.pack(side="bottom", fill="x", padx=(0, 20))
+scrollbar_horizontal.grid(row=1, column=0, sticky="ew")
+
+frame_products_list.grid_rowconfigure(0, weight=1)
+frame_products_list.grid_columnconfigure(0, weight=1)
 
 products_tree.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=scrollbar_horizontal.set)
 
@@ -1992,9 +2012,13 @@ multi_selection_menu.add_command(label="Aggiorna selezionati", command=lambda: o
 
 # Definizione eventi root e product_tree
 root.bind("<Control-a>", select_all_products)
+root.bind("<Configure>", update_tree_view_columns_width)
+
+search_entry.bind("<KeyRelease>", lambda e: update_products_to_view())
+search_entry.bind("<Button-3>", lambda e: show_text_menu(e, search_entry))
 
 products_tree.bind("<Button-1>", click)
-products_tree.bind("<Double-1>", show_product_details)
+products_tree.bind("<Double-1>", double_click)
 products_tree.bind("<Return>", show_product_details)
 products_tree.bind("<Shift-Button-1>", shift_click)
 products_tree.bind("<Down>", arrow_navigation_and_shift_arrow)
@@ -2006,5 +2030,6 @@ load_products_data()
 load_prices_data()
 
 # Avvio interfaccia
+root.after(150, update_tree_view_columns_width)
 periodic_refresh_root()
 root.mainloop()
