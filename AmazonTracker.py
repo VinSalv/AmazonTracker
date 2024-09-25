@@ -499,7 +499,7 @@ def center_window(window):
 
 def open_advanced_dialog():
     """
-    Apre il dialogo avanzato per aggiungere soglie di notifica via email
+    Apre il dialogo avanzato per aggiungere soglie di notifica via email e modifica del timer di aggiornamento
     """
     def add_email_threshold():
         """
@@ -622,6 +622,7 @@ def open_advanced_dialog():
             timer_entry.delete(0, "end")
             timer_entry.insert(0, "1800")
 
+    # Configurazione del dialogo per le opzioni avanzate
     advanced_dialog = tk.Toplevel(root)
     advanced_dialog.title("Aggiungi e-mail e soglia notifica")
     advanced_dialog.resizable(False, False)
