@@ -72,7 +72,7 @@ def load_products_data():
     else:
         try:
             # Crea il file con un dizionario vuoto
-            with open(prices_file, "w") as file:
+            with open(products_file, "w") as file:
                 json.dump({}, file)
             
                 logger.warning(f"File dei dati prodotti '{products_file}' non trovato, creato nuovo file vuoto")
@@ -646,24 +646,28 @@ def open_advanced_dialog():
 
     # Pulsante
     add_button = ttk.Button(container, text="Aggiungi", command=add_email_threshold)
-    add_button.grid(row=2, column=0, columnspan=2, pady=10, sticky="e")
+    add_button.grid(row=2, column=0, columnspan=2, pady=(10, 20), sticky="e")
 
     # Lista delle e-mail e delle soglie
     email_and_threshold_table = ttk.Treeview(container, columns=("Email", "Soglia"), show="headings")
-    email_and_threshold_table.grid(row=3, column=0, columnspan=2, pady=10, sticky="nsew")
+    email_and_threshold_table.grid(row=3, column=0, columnspan=2, sticky="nsew")
+
     email_and_threshold_table.heading("Email", text="Email")
     email_and_threshold_table.heading("Soglia", text="Soglia")
-    email_and_threshold_table.column("Email", width=200)
-    email_and_threshold_table.column("Soglia", width=120, anchor="center")
-    vsb = ttk.Scrollbar(container, orient="vertical", command=email_and_threshold_table.yview)
-    vsb.grid(row=3, column=2, sticky="ns")
-    email_and_threshold_table.configure(yscrollcommand=vsb.set)
+
+    scrollbar_vertical = ttk.Scrollbar(container, orient="vertical", command=email_and_threshold_table.yview)
+    scrollbar_vertical.grid(row=3, column=2, sticky="ns")
+
+    scrollbar_horizontal = ttk.Scrollbar(container, orient="horizontal", command=email_and_threshold_table.xview)
+    scrollbar_horizontal.grid(row=4, column=0, columnspan=2, sticky="ew")
+
+    email_and_threshold_table.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=scrollbar_horizontal.set)
 
     # Timer aggiornamento
-    ttk.Label(container, text="Timer [s]:").grid(row=4, column=0, padx=10, pady=10, sticky="we")
+    ttk.Label(container, text="Timer [s]:").grid(row=5, column=0, padx=10, pady=(20, 10), sticky="we")
     
     timer_entry = ttk.Entry(container, width=20, font=common_font, validate="key", validatecommand=(root.register(validate_timer_input), "%P"))
-    timer_entry.grid(row=4, column=1, padx=10, pady=10, sticky="w")
+    timer_entry.grid(row=5, column=1, padx=10, pady=10, sticky="w")
     timer_entry.insert(0, timer_refresh)
 
     # Menu tasto destro        
@@ -685,6 +689,11 @@ def open_advanced_dialog():
     update_email_and_threshold_table()
 
     center_window(advanced_dialog)
+
+    # La dimensione delle colonne può essere definita solo dopo aver creato il dialog
+    available_width = email_and_threshold_table.winfo_width()
+    email_and_threshold_table.column("Email", width=int(available_width * 0.8), stretch=False)
+    email_and_threshold_table.column("Soglia", width=int(available_width * 0.2), anchor="center", stretch=False)
 
 
 def open_add_product_dialog():
@@ -1747,7 +1756,7 @@ def update_tree_view_columns_width(event=None):
     # Evita l'adattamento delle colonne in caso la Root divenga troppo piccola
     if current_root_width >= 1550:
         # Ottieni la larghezza disponibile a partire da quella della Root
-        available_width = int(current_root_width * 0.95)
+        available_width = current_root_width * 0.95
         
         # Controlla che la larghezza sia maggiore di zero
         if available_width > 0:
