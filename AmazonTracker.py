@@ -533,55 +533,23 @@ def open_advanced_dialog():
         emails_and_thresholds[email] = threshold
 
         # Aggiornamento della tabella dopo l'inserimento
-        update_email_and_threshold_table()
+        update_email_and_threshold_tree()
 
         # Svuota i campi
         email_entry.delete(0, "end")
         threshold_entry.delete(0, "end")
-
-    def update_email_and_threshold_table():
+    
+    def validate_timer_input(input_value):
         """
-        Aggiorna la tabella che mostra le e-mail e le soglie
+        Validazione dell'input del timer, accettando solo numeri positivi o stringhe vuote
         """
-        # Svuota tabella delle e-mail e dei threshold
-        email_and_threshold_table.delete(*email_and_threshold_table.get_children())
-
-        # Riempi la tabella delle e-mail e dei threshold con i valori aggiornati
-        for key, value in sorted(emails_and_thresholds.items()):
-            email_and_threshold_table.insert("", "end", iid=key, values=(key, str(value) + "€" if value != 0.0 else "Nessuna soglia definita"))
-
-    def show_email_and_threshold_menu(event):
-        """
-        Mostra un menu contestuale per modificare una soglia o rimuovere un'e-mail
-        """
-        # Identifica l'e-mail cliccata (basato sulla posizione y del click)
-        identified_email = email_and_threshold_table.identify_row(event.y)
-
-        if not identified_email:
-            return
-        
-        # Selezione dell'e-mail cliccata
-        email_and_threshold_table.selection_set(identified_email)
-
-        # Mostra menu contestuale
-        email_threshold_menu.post(event.x_root, event.y_root)
-
-    def remove_email():
-        """
-        Rimuove l'email selezionata dalla tabella
-        """
-        email = email_and_threshold_table.selection()[0]
-
-        del emails_and_thresholds[email]
-        
-        # Aggiornamento della tabella dopo la rimozione
-        update_email_and_threshold_table()
+        return (input_value.isdigit() and int(input_value) >= 0) or input_value == ""
 
     def modify_threshold():
         """
         Modifica la soglia di notifica per l'email selezionata
         """
-        email = email_and_threshold_table.selection()[0]
+        email = email_and_threshold_tree.selection()[0]
 
         # Inserimento della nuova soglia
         new_threshold = simpledialog.askstring("Modifica Soglia", f"Soglia di notifica per '{email}':")
@@ -594,15 +562,85 @@ def open_advanced_dialog():
             emails_and_thresholds[email] = float(new_threshold)
 
             # Aggiornamento della tabella dopo la modifica
-            update_email_and_threshold_table()
+            update_email_and_threshold_tree()
         except:
             messagebox.showwarning("Attenzione", "Inserisci una soglia valida (numerica) oppure 0")
 
-    def validate_timer_input(input_value):
+    def remove_email():
         """
-        Validazione dell'input del timer, accettando solo numeri positivi o stringhe vuote
+        Rimuove l'email selezionata dalla tabella
         """
-        return (input_value.isdigit() and int(input_value) >= 0) or input_value == ""
+        global hovered_row_email_and_threshold_tree
+
+        email = email_and_threshold_tree.selection()[0]
+
+        del emails_and_thresholds[email]
+
+        hovered_row_email_and_threshold_tree = None
+        
+        # Aggiornamento della tabella dopo la rimozione
+        update_email_and_threshold_tree()
+
+    def click_email_and_threshold_tree(event):
+        """
+        Selezione riga con il tasto sinistro del mouse
+        Deseleziona tutte le righe se si seleziona qualcosa di diverso da una riga
+        """
+        rows_in_email_and_threshold_tree = email_and_threshold_tree.get_children()
+        selected_email_and_threshold = email_and_threshold_tree.selection()
+
+        # Identifica l'elemento cliccato (basato sulla posizione y del click)
+        identified_email_and_threshold_index = email_and_threshold_tree.identify_row(event.y)
+
+        # Seleziona o deseleziona una riga in base a se è stato cliccato o meno
+        if identified_email_and_threshold_index in rows_in_email_and_threshold_tree:
+            row_index = rows_in_email_and_threshold_tree.index(identified_email_and_threshold_index)
+            
+            email_and_threshold_tree.selection_remove(*selected_email_and_threshold)
+            email_and_threshold_tree.selection_add(rows_in_email_and_threshold_tree[row_index])
+        else:
+            email_and_threshold_tree.selection_remove(*selected_email_and_threshold)
+
+    def show_email_and_threshold_menu(event):
+        """
+        Mostra un menu contestuale per modificare una soglia o rimuovere un'e-mail
+        """
+        # Identifica l'e-mail cliccata (basato sulla posizione y del click)
+        identified_email = email_and_threshold_tree.identify_row(event.y)
+
+        if not identified_email:
+            return
+        
+        # Selezione dell'e-mail cliccata
+        email_and_threshold_tree.selection_set(identified_email)
+
+        # Mostra menu contestuale
+        email_threshold_menu.post(event.x_root, event.y_root)
+
+    def on_hover_email_and_threshold_tree(event):
+        """
+        Evidenzia le righe sul TreeView al passaggio del mouse
+        """
+        global hovered_row_email_and_threshold_tree
+
+        # Identifica la riga sopra la quale si trova il mouse
+        row_id = email_and_threshold_tree.identify_row(event.y)
+
+        # Se il mouse è sopra una riga e non è la stessa già evidenziata
+        if row_id and row_id != hovered_row_email_and_threshold_tree:
+            # Resetta il colore della riga precedentemente evidenziata
+            if hovered_row_email_and_threshold_tree:
+                email_and_threshold_tree.item(hovered_row_email_and_threshold_tree, tags=())
+
+            # Assegna il tag "hover" alla nuova riga
+            email_and_threshold_tree.item(row_id, tags=("hover",))
+
+            hovered_row_email_and_threshold_tree = row_id
+
+        # Se il mouse non è sopra una riga, resetta l'hover
+        elif not row_id and hovered_row_email_and_threshold_tree:
+            email_and_threshold_tree.item(hovered_row_email_and_threshold_tree, tags=())
+            hovered_row_email_and_threshold_tree = None
 
     def on_timer_change(*args):
         """
@@ -621,6 +659,17 @@ def open_advanced_dialog():
             timer_refresh = 1800 # Valore di default
             timer_entry.delete(0, "end")
             timer_entry.insert(0, "1800")
+
+    def update_email_and_threshold_tree():
+        """
+        Aggiorna la tabella che mostra le e-mail e le soglie
+        """
+        # Svuota tabella delle e-mail e dei threshold
+        email_and_threshold_tree.delete(*email_and_threshold_tree.get_children())
+
+        # Riempi la tabella delle e-mail e dei threshold con i valori aggiornati
+        for key, value in sorted(emails_and_thresholds.items()):
+            email_and_threshold_tree.insert("", "end", iid=key, values=(key, str(value) + "€" if value != 0.0 else "Non definita"))
 
     # Configurazione del dialogo per le opzioni avanzate
     advanced_dialog = tk.Toplevel(root)
@@ -649,19 +698,20 @@ def open_advanced_dialog():
     add_button.grid(row=2, column=0, columnspan=2, pady=(10, 20), sticky="e")
 
     # Lista delle e-mail e delle soglie
-    email_and_threshold_table = ttk.Treeview(container, columns=("Email", "Soglia"), show="headings")
-    email_and_threshold_table.grid(row=3, column=0, columnspan=2, sticky="nsew")
+    email_and_threshold_tree = ttk.Treeview(container, columns=("Email", "Soglia"), show="headings")
+    email_and_threshold_tree.grid(row=3, column=0, columnspan=2, sticky="nsew")
 
-    email_and_threshold_table.heading("Email", text="Email")
-    email_and_threshold_table.heading("Soglia", text="Soglia")
+    email_and_threshold_tree.heading("Email", text="Email")
+    email_and_threshold_tree.heading("Soglia", text="Soglia")
 
-    scrollbar_vertical = ttk.Scrollbar(container, orient="vertical", command=email_and_threshold_table.yview)
+    scrollbar_vertical = ttk.Scrollbar(container, orient="vertical", command=email_and_threshold_tree.yview)
     scrollbar_vertical.grid(row=3, column=2, sticky="ns")
 
-    scrollbar_horizontal = ttk.Scrollbar(container, orient="horizontal", command=email_and_threshold_table.xview)
+    scrollbar_horizontal = ttk.Scrollbar(container, orient="horizontal", command=email_and_threshold_tree.xview)
     scrollbar_horizontal.grid(row=4, column=0, columnspan=2, sticky="ew")
 
-    email_and_threshold_table.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=scrollbar_horizontal.set)
+    email_and_threshold_tree.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=scrollbar_horizontal.set)
+    email_and_threshold_tree.tag_configure("hover", background="#cceeff")
 
     # Timer aggiornamento
     ttk.Label(container, text="Timer [s]:").grid(row=5, column=0, padx=10, pady=(20, 10), sticky="we")
@@ -676,24 +726,27 @@ def open_advanced_dialog():
     email_threshold_menu.add_command(label="Rimuovi Email", command=remove_email)
 
     # Definizione eventi widget
+    advanced_dialog.bind("<Button-1>", click_email_and_threshold_tree)
+
     email_entry.bind("<Button-3>", lambda e: show_text_menu(e, email_entry))
 
     threshold_entry.bind("<Button-3>", lambda e: show_text_menu(e, threshold_entry))
 
-    email_and_threshold_table.bind("<Button-3>", show_email_and_threshold_menu)
+    email_and_threshold_tree.bind("<Button-3>", show_email_and_threshold_menu)
+    email_and_threshold_tree.bind("<Motion>", on_hover_email_and_threshold_tree)
 
     timer_entry.bind("<KeyRelease>", on_timer_change)
     timer_entry.bind("<Button-3>", lambda e: show_text_menu(e, timer_entry))
-    
+
     # Mostra eventuali e-mail e relative soglie nella tabella
-    update_email_and_threshold_table()
+    update_email_and_threshold_tree()
 
     center_window(advanced_dialog)
 
     # La dimensione delle colonne può essere definita solo dopo aver creato il dialog
-    available_width = email_and_threshold_table.winfo_width()
-    email_and_threshold_table.column("Email", width=int(available_width * 0.8), stretch=False)
-    email_and_threshold_table.column("Soglia", width=int(available_width * 0.2), anchor="center", stretch=False)
+    available_width = email_and_threshold_tree.winfo_width()
+    email_and_threshold_tree.column("Email", width=int(available_width * 0.8), stretch=False)
+    email_and_threshold_tree.column("Soglia", width=int(available_width * 0.2), anchor="center", stretch=False)
 
 
 def open_add_product_dialog():
@@ -1211,7 +1264,7 @@ def remove_products():
             threads[name].join(timeout=1) # Aspetta che il thread corrente termini
             del threads[name]
 
-    global stop_events, threads
+    global stop_events, threads, hovered_row_products_tree
 
     selected_products = products_tree.selection()
 
@@ -1241,6 +1294,8 @@ def remove_products():
             
             # Rimozione prodotto
             del products[name]
+
+            hovered_row_products_tree = None
 
             save_products_data()
 
@@ -1544,6 +1599,26 @@ def select_all_products(event=None):
     current_index = None
 
 
+def update_tree_view_columns_width(event=None):
+    """
+    Aggiorna la larghezza delle colonne della TreeView al variare della dimensione della finestra
+    """
+    # Ottieni la larghezza della finestra root
+    current_root_width = root.winfo_width()
+    
+    # Evita l'adattamento delle colonne in caso la Root divenga troppo piccola
+    if current_root_width >= 1550:
+        # Ottieni la larghezza disponibile a partire da quella della Root
+        available_width = current_root_width * 0.95
+        
+        # Controlla che la larghezza sia maggiore di zero
+        if available_width > 0:
+            # Imposta la larghezza di ciascuna colonna basata sulla percentuale
+            for i, col in enumerate(columns):
+                col_width = int(available_width * column_width_percentages[i])  # Calcola la larghezza
+                products_tree.column(col, width=col_width)
+
+
 def click(event):
     """
     Selezione prodotto con il tasto sinistro del mouse e multiselezione con ctrl + tasto sinistro del mouse
@@ -1575,11 +1650,9 @@ def click(event):
             products_tree.selection_remove(*selected_products)
             products_tree.selection_add(products_in_tree_view[current_index])
     else:
-        # Deseleziona solo se l'evento proviene dal widget della TreeView
-        if event.widget == products_tree:
-            products_tree.selection_remove(*selected_products)
+        products_tree.selection_remove(*selected_products)
 
-            current_index = None
+        current_index = None
 
 
 def double_click(event):
@@ -1746,24 +1819,30 @@ def show_tree_view_menu(event):
             current_index = None
 
 
-def update_tree_view_columns_width(event=None):
+def on_hover_products_tree(event):
     """
-    Aggiorna la larghezza delle colonne della TreeView al variare della dimensione della finestra
+    Evidenzia i prodotti sul TreeView al passaggio del mouse
     """
-    # Ottieni la larghezza della finestra root
-    current_root_width = root.winfo_width()
-    
-    # Evita l'adattamento delle colonne in caso la Root divenga troppo piccola
-    if current_root_width >= 1550:
-        # Ottieni la larghezza disponibile a partire da quella della Root
-        available_width = current_root_width * 0.95
-        
-        # Controlla che la larghezza sia maggiore di zero
-        if available_width > 0:
-            # Imposta la larghezza di ciascuna colonna basata sulla percentuale
-            for i, col in enumerate(columns):
-                col_width = int(available_width * column_width_percentages[i])  # Calcola la larghezza
-                products_tree.column(col, width=col_width)
+    global hovered_row_products_tree
+
+    # Identifica il prodotto cliccato (basato sulla posizione y del click)
+    row_id = products_tree.identify_row(event.y)
+
+    # Se il mouse è sopra una riga e non è la stessa già evidenziata
+    if row_id and row_id != hovered_row_products_tree:
+        # Resetta il colore della riga precedentemente evidenziata
+        if hovered_row_products_tree:
+            products_tree.item(hovered_row_products_tree, tags=())
+
+        # Assegna il tag "hover" alla nuova riga
+        products_tree.item(row_id, tags=("hover",))
+
+        hovered_row_products_tree = row_id
+
+    # Se il mouse non è sopra una riga, resetta l'hover
+    elif not row_id and hovered_row_products_tree:
+        products_tree.item(hovered_row_products_tree, tags=())
+        hovered_row_products_tree = None
 
 
 def periodic_refresh_root():
@@ -1816,6 +1895,10 @@ def periodic_refresh_root():
         for product in selected_products:
             if product in products_in_tree_view:
                 products_tree.selection_add(product)
+
+        # Ripristina la riga in hover, se esiste ancora
+        if hovered_row_products_tree in products_in_tree_view:
+            products_tree.item(hovered_row_products_tree, tags=("hover",))
 
     def update_buttons_state():
         """
@@ -1938,6 +2021,9 @@ click_index = None
 
 is_possible_to_refresh_root = True
 
+hovered_row_products_tree = None
+hovered_row_email_and_threshold_tree = None
+
 # Interfaccia principale
 root = tk.Tk()
 root.title("Monitoraggio Prezzi Amazon")
@@ -1974,10 +2060,14 @@ update_all_button.grid(row=2, column=6, padx=5, pady=5, sticky="e")
 search_frame = ttk.Frame(root)
 search_frame.pack(fill="x", padx=5, pady=0)
 
-ttk.Label(search_frame, text="Ricerca Prodotto:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
+ttk.Label(search_frame, text="Ricerca Prodotto:", font=common_font).grid(row=0, column=0, padx=10, pady=10, sticky="we")
 
 search_entry = ttk.Entry(search_frame, width=79, font=common_font, validate="key", validatecommand=limit_letters)
 search_entry.grid(row=0, column=1, padx=10, pady=10, sticky="we")
+
+# Configura lo stile della Treeview
+style = ttk.Style()
+style.configure("Treeview", rowheight=25)
 
 # Lista prodotti
 frame_products_list = tk.Frame(root)
@@ -2002,6 +2092,7 @@ frame_products_list.grid_rowconfigure(0, weight=1)
 frame_products_list.grid_columnconfigure(0, weight=1)
 
 products_tree.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=scrollbar_horizontal.set)
+products_tree.tag_configure("hover", background="#cceeff")
 
 # Footer
 frame_footer = tk.Frame(root)
@@ -2034,6 +2125,8 @@ products_tree.bind("<Shift-Button-1>", shift_click)
 products_tree.bind("<Down>", arrow_navigation_and_shift_arrow)
 products_tree.bind("<Up>", arrow_navigation_and_shift_arrow)
 products_tree.bind("<Button-3>", show_tree_view_menu)
+
+products_tree.bind("<Motion>", on_hover_products_tree)
 
 # Carica i dati
 load_products_data()
