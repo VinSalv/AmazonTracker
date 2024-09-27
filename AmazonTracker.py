@@ -310,11 +310,18 @@ def send_notification_and_email(name, previous_price, current_price):
 
     # Prepara l'oggetto e il corpo della notifica
     subject = "Prezzo in calo!"
-    body = (
-        f"Il prezzo dell'articolo '{name}' è sceso da {previous_price}€ a {current_price}€.\n\n"
-        + f"Dettagli:\n\t- Prezzo medio: {average_price}€\n\t- Prezzo minimo storico: {price_minimum}€\n\t- Prezzo massimo storico: {price_maximum}€\n\n{text_suggestion}\n\n"
-        + f"Acquista ora: {products[name]['url']}"
-    )
+    if average_price == price_minimum == price_maximum:
+         body = (
+            f"Il prezzo dell'articolo '{name}' è sceso da {previous_price}€ a {current_price}€.\n\n"
+            + "Dettagli:\n\t- Primo ribasso del prezzo rilevato\n\nNon ho abbastanza dati nello storico del prodotto per fornire un suggerimento sulla validità dell'acquisto\n\n"
+            + f"Acquista ora: {products[name]['url']}"
+            )
+    else:
+        body = (
+            f"Il prezzo dell'articolo '{name}' è sceso da {previous_price}€ a {current_price}€.\n\n"
+            + f"Dettagli:\n\t- Prezzo medio: {average_price}€\n\t- Prezzo minimo storico: {price_minimum}€\n\t- Prezzo massimo storico: {price_maximum}€\n\n{text_suggestion}\n\n"
+            + f"Acquista ora: {products[name]['url']}"
+            )
     
     # Invio notifica telegram
     if current_price < previous_price:
@@ -497,10 +504,43 @@ def center_window(window):
     window.geometry(f"{width}x{height}+{x}+{y}")
 
 
-def open_advanced_dialog():
+def block_root():
+    """
+    Blocca il refresh della Root e qualsiasi interazione essa
+    """
+    set_periodic_refresh_root(False)
+
+    for window in root.winfo_children():
+        try:
+            window.attributes("-disabled", True)
+        except:
+            pass
+    root.wm_attributes("-disabled", True)
+
+
+def unlock_root():
+    """
+    Sblocca il refresh della Root e l'interazione essa
+    """
+    set_periodic_refresh_root()
+
+    for window in root.winfo_children():
+        try:
+            window.attributes("-disabled", False)
+        except:
+            pass
+    root.attributes("-disabled", False)
+
+
+def open_advanced_dialog(parent_dialog):
     """
     Apre il dialogo avanzato per aggiungere soglie di notifica via email e modifica del timer di aggiornamento
     """
+    def close_advanced_dialog(advanced_dialog, parent_dialog):
+        advanced_dialog.grab_release()  # Rilascia il grab
+        parent_dialog.grab_set()  # Riapplica il grab alla finestra principale se necessario
+        advanced_dialog.destroy()
+
     def add_email_threshold():
         """
         Aggiunta di email e soglia di prezzo
@@ -673,9 +713,10 @@ def open_advanced_dialog():
 
     # Configurazione del dialogo per le opzioni avanzate
     advanced_dialog = tk.Toplevel(root)
+    advanced_dialog.protocol("WM_DELETE_WINDOW", lambda: close_advanced_dialog(advanced_dialog, parent_dialog))
     advanced_dialog.title("Aggiungi e-mail e soglia notifica")
     advanced_dialog.resizable(False, False)
-    advanced_dialog.transient(root)
+    advanced_dialog.transient(parent_dialog)
     advanced_dialog.grab_set()
     
     container = ttk.Frame(advanced_dialog, padding="10")
@@ -811,6 +852,7 @@ def open_add_product_dialog():
         """
         Aggiunge i dettagli di un prodotto
         """
+
         if not name or not url:
             messagebox.showwarning("Attenzione", "Compila tutti i campi!")
             return False
@@ -823,7 +865,10 @@ def open_add_product_dialog():
             if url == products[existing_name]["url"]:
                 messagebox.showwarning("Attenzione", "Questo prodotto è già in monitoraggio!\nCambia url")
                 return False
-        
+
+        # Blocco della Root durante l'aggiunta del prodotto
+        block_root()
+
         # Ricerca prezzo
         current_price = get_price(url)
 
@@ -847,11 +892,11 @@ def open_add_product_dialog():
         save_products_data()
         save_prices_data(name, products[name]["price"])
 
-        # Avvia il monitoraggio del prodotto
-        start_tracking(name, url)
-
         # Reset dei filtri al seguito dell'aggiunta del prodotto
         reset_filters()
+
+        # Sblocco della Root al termine dell'aggiunta del prodotto
+        unlock_root()
 
         logger.info(f"Prodotto '{name}' aggiunto con successo")
 
@@ -914,7 +959,7 @@ def open_add_product_dialog():
     notify_checkbutton.grid(row=2, column=1, padx=10, pady=10, sticky="we")
 
     # Pulsanti
-    ttk.Button(container, text="Avanzate", command=open_advanced_dialog).grid(row=3, column=0, pady=10, sticky="w")
+    ttk.Button(container, text="Avanzate", command=lambda: open_advanced_dialog(add_product_dialog)).grid(row=3, column=0, pady=10, sticky="w")
     ttk.Button(container, text="Aggiungi", command=lambda: add_product(name_entry.get().strip().lower(), url_text.get("1.0", "end-1c").strip()),).grid(row=3, column=1, pady=10, sticky="e")
 
     # Definizione eventi widget
@@ -933,6 +978,9 @@ def show_product_details(event=None):
     """
     Apri una finestra di dialogo con i dettagli del prodotto selezionato nella TreeView
     """
+    def open_url(event):
+        webbrowser.open(url)
+
     def open_prices_graph_panel(name):
         """
         Apre una finestra con un grafico dei prezzi del prodotto
@@ -957,37 +1005,12 @@ def show_product_details(event=None):
             
             return prices_graph
 
-        def disable_tkinter_windows(root):
-            """
-            Disabilita tutte le finestre Tkinter aperte, compresa la finestra principale.
-            """
-            for window in root.winfo_children():
-                try:
-                    window.attributes("-disabled", True)
-                except:
-                    pass
-
-            root.attributes("-disabled", True)
-
-        def enable_tkinter_windows(root):
-            """
-            Abilita tutte le finestre Tkinter aperte, compresa la finestra principale.
-            """
-            for window in root.winfo_children():
-                try:
-                    window.attributes("-disabled", False)
-                except:
-                    pass
-
-            root.attributes("-disabled", False)
-
         def on_close(event=None):
             """
             Gestisce la chiusura della finestra del grafico dei prezzi
             """
-            set_periodic_refresh_root()
-            
-            enable_tkinter_windows(root)
+            # Sblocco della Root alla chiusura del grafico dei prezzi
+            unlock_root()
 
             os.remove(temp_file_path)
 
@@ -996,11 +1019,10 @@ def show_product_details(event=None):
 
             prices_graph_application.quit()
 
-        global prices_graph_application
+        global prices_graph_application    
 
-        set_periodic_refresh_root(False)
-
-        disable_tkinter_windows(root)
+        # Blocco della Root durante la generazione del grafico dei prezzi
+        block_root()
 
         # Creazione del grafico dei prezzi
         try:
@@ -1008,9 +1030,9 @@ def show_product_details(event=None):
         except ValueError as e:
             logger.error("Errore: " + str(e))
 
-            set_periodic_refresh_root()
+            # Sblocco della Root alla chiusura del grafico dei prezzi
+            unlock_root()
 
-            enable_tkinter_windows(root)
             return
         
         html_str = pio.to_html(prices_graph, full_html=True)
@@ -1080,19 +1102,19 @@ def show_product_details(event=None):
     text_suggestion, color_suggestion = calculate_suggestion(all_prices, current_price, average_price, price_minimum, price_maximum)
     
     # Creazione della finestra di dialogo con i dettagli del prodotto
-    details_window = tk.Toplevel(root)
-    details_window.title(f"Dettagli del prodotto: {name}")
-    details_window.minsize(500, 300)
-    details_window.resizable(False, False)
-    details_window.configure(padx=20, pady=10)
-    details_window.transient(root)
-    details_window.grab_set()
+    details_dialog = tk.Toplevel(root)
+    details_dialog.title(f"Dettagli del prodotto: {name}")
+    details_dialog.minsize(500, 300)
+    details_dialog.resizable(False, False)
+    details_dialog.configure(padx=20, pady=10)
+    details_dialog.transient(root)
+    details_dialog.grab_set()
 
     # Visualizzazione dei dettagli del prodotto
     name_font = ("Helvetica", 12, "bold")
     highlight_font = ("Helvetica", 14, "bold")
 
-    top_frame = ttk.Frame(details_window)
+    top_frame = ttk.Frame(details_dialog)
     top_frame.pack(fill="x", pady=10)
     
     top_frame.grid_columnconfigure(0, weight=1)
@@ -1109,7 +1131,7 @@ def show_product_details(event=None):
     ttk.Button(top_frame, text="Copia URL", command=lambda: copy_to_clipboard(url)).grid(row=1, column=1, sticky="e")
 
     # Visualizzazione dei prezzi storici e delle statistiche
-    prices_frame = ttk.Frame(details_window)
+    prices_frame = ttk.Frame(details_dialog)
     prices_frame.pack(anchor="w", padx=10)
 
     ttk.Label(prices_frame, text=f"Prezzo Attuale: {current_price:.2f}€" if isinstance(current_price, (int, float)) else "Prezzo Attuale: -", font=highlight_font, foreground=color_suggestion).grid(row=0, column=0, sticky="w", pady=(5, 10))
@@ -1124,15 +1146,15 @@ def show_product_details(event=None):
     ttk.Label(prices_frame, text=f"{price_maximum:.2f}€" if isinstance(price_maximum, (int, float)) else "-", font=common_font).grid(row=3, column=1, sticky="e", pady=5)
     
     # Visualizzazione del cosniglio sull'acquisto
-    ttk.Label(details_window, text=text_suggestion, font=name_font, foreground=color_suggestion).pack(pady=10)
+    ttk.Label(details_dialog, text=text_suggestion, font=name_font, foreground=color_suggestion).pack(pady=10)
 
     # Pulsante chiusura finestra
-    ttk.Button(details_window, text="Chiudi", command=details_window.destroy).pack(pady=10)
+    ttk.Button(details_dialog, text="Chiudi", command=details_dialog.destroy).pack(pady=10)
 
     # Definizione eventi widget
-    url_label.bind("<Button-1>", lambda e: webbrowser.open(url))
+    url_label.bind("<Button-1>", open_url)
 
-    center_window(details_window)
+    center_window(details_dialog)
 
 
 def open_edit_product_dialog():
@@ -1153,6 +1175,9 @@ def open_edit_product_dialog():
                 if new_url == products[existing_name]["url"]:
                     messagebox.showwarning("Attenzione", "Questo prodotto è già in monitoraggio!\nCambia l'URL")
                     return False
+
+        # Blocco della Root durante la modifica del prodotto
+        block_root()
 
         # Ricerca prezzo aggiornato
         new_price = get_price(new_url)
@@ -1177,11 +1202,11 @@ def open_edit_product_dialog():
         save_products_data()
         save_prices_data(name, products[name]["price"])
 
-        # Riavvia il monitoraggio del prodotto
-        start_tracking(name, new_url)
-
         # Reset dei filtri al seguito della modifica del prodotto
         reset_filters()
+
+        # Sblocco della Root al termine della modifica del prodotto
+        unlock_root()
 
         logger.info(f"Prodotto '{name}' modificato con successo")
 
@@ -1238,7 +1263,7 @@ def open_edit_product_dialog():
     notify_checkbutton.grid(row=2, column=1, padx=10, pady=10, sticky="we")
 
     # Pulsanti
-    ttk.Button(container, text="Avanzate", command=open_advanced_dialog).grid(row=3, column=0, pady=10, sticky="w")
+    ttk.Button(container, text="Avanzate", command=lambda: open_advanced_dialog(edit_product_dialog)).grid(row=3, column=0, pady=10, sticky="w")
     ttk.Button(container, text="Salva", command=lambda: edit_product(selected_name, selected_url, url_text.get("1.0", "end-1c").strip())).grid(row=3, column=1, pady=10, sticky="e")
 
     # Definizione eventi widget
@@ -1287,6 +1312,9 @@ def remove_products():
         # Reset dei filtri prima della rimozione dei prodotti
         reset_filters()
 
+        # Blocco della Root durante la rimozione dei prodotti
+        block_root()
+
         # Ciclo sui prodotti selezionati per rimuoverli
         for name in selected_products:
             # Ferma il monitoraggio del prodotto
@@ -1301,6 +1329,9 @@ def remove_products():
 
             logger.info(f"Prodotto '{name}' rimosso con successo")
 
+        # Sblocco della Root al termine della rimozione dei prodotti
+        unlock_root()
+
 
 def open_progress_dialog(update_all=True):
     """
@@ -1308,18 +1339,18 @@ def open_progress_dialog(update_all=True):
     Il processo di aggiornamento può essere applicato a tutti i prodotti o solo a quelli selezionati, a seconda
     del parametro `update_all`
     """
-    def update_prices_threaded(dialog, update_all=True):
+    def update_prices_threaded(loading_dialog, update_all=True):
         """
         Funzione del thread separato per gestire l'aggiornamento dei prezzi
         """
-        def update_prices(dialog, products_to_update):
+        def update_prices(loading_dialog, products_to_update):
             """
             Aggiornamento dei prezzi dei prodotti e generazione di un messaggio di reportistica
             """
             # Impostazione dei valori limite per la barra di progresso
             max_value = len(products_to_update)
-            dialog.progress_bar["maximum"] = max_value
-            dialog.progress_bar["value"] = 0
+            loading_dialog.progress_bar["maximum"] = max_value
+            loading_dialog.progress_bar["value"] = 0
 
             updated_products = []
 
@@ -1329,9 +1360,9 @@ def open_progress_dialog(update_all=True):
                 current_price = get_price(products[name]["url"])
                 
                 # Aggiornamento della barra di progresso
-                dialog.progress_bar["value"] = product_index + 1
-                dialog.progress_label.config(text=f"Aggiornamento di {product_index + 1}/{max_value}...")
-                dialog.update_idletasks()
+                loading_dialog.progress_bar["value"] = product_index + 1
+                loading_dialog.progress_label.config(text=f"Aggiornamento di {product_index + 1}/{max_value}...")
+                loading_dialog.update_idletasks()
 
                 # Gestione del caso in cui il prezzo non può essere aggiornato passando al prossimo prodotto da aggiornare
                 if current_price is None:
@@ -1351,27 +1382,27 @@ def open_progress_dialog(update_all=True):
                 # Recupera l'ultimo prezzo memorizzato del prodotto
                 previous_price = get_last_price(name)
 
-                # Aggiunta dei prodotti aggiornati alla lista per il report finale
+                # Aggiunta dei prodotti aggiornati alla lista per il report finale e notifica di un eventuale ribasso
                 if previous_price is not None:
                     updated_products.append((name, previous_price, current_price))
+                
+                    # Notifica dei prodotti la cui opzione di avviso è abilitata
+                    if products[name]["notify"]:
+                        send_notification_and_email(name, previous_price, current_price)
 
                 save_prices_data(name, products[name]["price"])
 
             save_products_data()
 
             # Impostazione dei valori limite per la barra di progresso
-            dialog.progress_label.config(text=f"Invio di eventuali notifiche...")
-            dialog.update_idletasks()
+            loading_dialog.progress_label.config(text=f"Invio di eventuali notifiche...")
+            loading_dialog.update_idletasks()
             
             # Visualizzazione di un messaggio con i risultati dell'aggiornamento ed eventualmente invio delle notifiche
             if updated_products:
                 status_message = "Prezzi aggiornati per i seguenti prodotti:\n\n"
 
                 for name, previous_price, current_price in updated_products:
-                    # Notifica dei prodotti la cui opzione di avviso è abilitata
-                    if products[name]["notify"]:
-                        send_notification_and_email(name, previous_price, current_price)
-
                     # Costruzione messaggio reportistica
                     if current_price < previous_price:
                         status_message += (f"{name}: Prezzo calato da {previous_price}€ a {current_price}€\n")
@@ -1390,13 +1421,11 @@ def open_progress_dialog(update_all=True):
         reset_filters()
 
         # Blocco della Root durante l'aggiornamento dei prezzi
-        set_periodic_refresh_root(False)
-        root.resizable(False, False)
-        root.wm_attributes("-disabled", True)
+        block_root()
         
         # Aggiornamento dei prezzi di tutti i prodotti o solo di quelli selezionati
         if update_all:
-            update_prices(dialog, products)
+            update_prices(loading_dialog, products)
         else:
             selected_products = products_tree.selection()
 
@@ -1404,38 +1433,35 @@ def open_progress_dialog(update_all=True):
                 logger.warning("Nessun prodotto selezionato per aggiornare il prezzo")
                 return
             
-            update_prices(dialog, selected_products)
+            update_prices(loading_dialog, selected_products)
 
         # Sblocco della Root al termine dell'aggiornamento dei prezzi
-        set_periodic_refresh_root()
-        root.resizable(True, True)
-        root.wm_attributes("-disabled", False)
+        unlock_root()
 
-        dialog.destroy()
+        loading_dialog.destroy()
 
     # Dialog per informazioni sul caricamento
-    dialog = tk.Toplevel(root)
-    dialog.grab_set()
-    dialog.overrideredirect(True)
-    dialog.resizable(False, False)
+    loading_dialog = tk.Toplevel(root)
+    loading_dialog.overrideredirect(True)
+    loading_dialog.resizable(False, False)
     
     # Etichetta avanzamento
-    progress_label = tk.Label(dialog, text="Inizio aggiornamento...")
+    progress_label = tk.Label(loading_dialog, text="Inizio aggiornamento...")
     progress_label.pack(pady=(10,5), padx=10)
-    dialog.progress_label = progress_label
+    loading_dialog.progress_label = progress_label
 
     # Barra di caricamento
-    progress_bar = ttk.Progressbar(dialog, orient="horizontal", length=250, mode="determinate")
+    progress_bar = ttk.Progressbar(loading_dialog, orient="horizontal", length=250, mode="determinate")
     progress_bar.pack(pady=(0,10), padx=10)
-    dialog.progress_bar = progress_bar
+    loading_dialog.progress_bar = progress_bar
 
-    center_window(dialog)
+    center_window(loading_dialog)
 
     # Esecuzione dell'aggiornamento dei prezzi in un thread separato (necessario per la corretta visualizzazione del dialog)
-    thread = threading.Thread(target=update_prices_threaded, args=(dialog, update_all))
+    thread = threading.Thread(target=update_prices_threaded, args=(loading_dialog, update_all))
     thread.start()
 
-    dialog.wait_window()
+    loading_dialog.wait_window()
 
 
 def update_products_to_view():
