@@ -852,7 +852,6 @@ def open_add_product_dialog():
         """
         Aggiunge i dettagli di un prodotto
         """
-
         if not name or not url:
             messagebox.showwarning("Attenzione", "Compila tutti i campi!")
             return False
