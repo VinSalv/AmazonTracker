@@ -41,7 +41,7 @@ def load_products_data():
     """
     Carica i dati dei prodotti da file e avvia il monitoraggio per ogni prodotto
     """
-    global products, products_to_view
+    global products, products_to_view, suggestion_emails
 
     if os.path.exists(products_file):
         try:
@@ -60,6 +60,11 @@ def load_products_data():
                     
                     # Avvio monitoraggio del prodotto estratto
                     start_tracking(name, url)
+
+                    # Riempi la lista delle email di suggerimento
+                    for email in products[name]['emails_and_thresholds']:
+                        if email not in suggestion_emails:
+                            suggestion_emails.append(email)
 
                 # Aggiornamento prodotti da visualizzare sulla TreeView
                 products_to_view = products
@@ -536,6 +541,11 @@ def open_advanced_dialog(parent_dialog):
     """
     Apre il dialogo avanzato per aggiungere soglie di notifica via email e modifica del timer di aggiornamento
     """
+    def is_valid_email(email):
+        # Espressione regolare per validare il formato dell'email
+        email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+        return re.match(email_regex, email) is not None
+    
     def close_advanced_dialog(advanced_dialog, parent_dialog):
         advanced_dialog.grab_release()  # Rilascia il grab
         parent_dialog.grab_set()  # Riapplica il grab alla finestra principale se necessario
@@ -545,11 +555,15 @@ def open_advanced_dialog(parent_dialog):
         """
         Aggiunta di email e soglia di prezzo
         """
-        email = email_entry.get().strip()
+        email = email_entry.get().strip().lower()
         threshold = threshold_entry.get().strip()
 
         if not email:
             messagebox.showwarning("Attenzione", "Compila l'email!")
+            return
+        
+        if not is_valid_email(email):
+            messagebox.showwarning("Attenzione", "Inserire una e-mail corretta!")
             return
         
         # Notifica senza soglia specifica
@@ -579,7 +593,7 @@ def open_advanced_dialog(parent_dialog):
         email_entry.delete(0, "end")
         threshold_entry.delete(0, "end")
     
-    def validate_timer_input(input_value):
+    def is_valid_timer(input_value):
         """
         Validazione dell'input del timer, accettando solo numeri positivi o stringhe vuote
         """
@@ -640,6 +654,60 @@ def open_advanced_dialog(parent_dialog):
             email_and_threshold_tree.selection_add(rows_in_email_and_threshold_tree[row_index])
         else:
             email_and_threshold_tree.selection_remove(*selected_email_and_threshold)
+
+    def hide_suggestions(event=None):
+        """
+        Nasconde il frame che contiene la `listbox_suggestion_emails`
+        """
+        listbox_frame.place_forget()
+
+    def update_suggestions(*args):
+        """
+        Aggiorna i suggerimenti nella `listbox_suggestion_emails` in base al testo inserito in `email_entry`
+        """
+        typed_text = email_entry_var.get().strip().lower()
+
+        # Reset della lista di suggerimenti
+        listbox_suggestion_emails.delete(0, tk.END)
+
+        if typed_text:
+            # Ricerca dei nomi dei prodotti che contengono il testo digitato
+            matching_suggestions = [email for email in suggestion_emails if typed_text in email.lower()]
+
+            # Aggiunta del testo corrente alla lista dei suggerimenti qual'ora non fosse già presente
+            if email_entry.get() not in matching_suggestions:
+                listbox_suggestion_emails.insert(tk.END, email_entry.get())
+
+            # Aggiunta dei suggerimenti alla lista dei suggerimenti
+            for suggestion in matching_suggestions:
+                listbox_suggestion_emails.insert(tk.END, suggestion)
+
+            # Impostazione altezza massima della lista dei suggerimenti
+            listbox_suggestion_emails.config(height=min(len(matching_suggestions), 5))
+
+            # Posiziona il frame che contiene la lista dei suggerimenti sotto il campo di input
+            listbox_frame.place(x=email_entry.winfo_x(), y=email_entry.winfo_y() + email_entry.winfo_height(), anchor="nw")
+            
+            # Solleva la lista dei suggerimenti in cima a tutti gli altri widget
+            listbox_suggestion_emails.lift()
+        else:
+            # Nasconde la lista dei suggerimenti qual'ora non venga digitato alcun testo
+            listbox_frame.place_forget()
+
+    def on_select_suggestion(event=None):
+        """
+        Selezione del suggerimento e trascrizione in `email_entry`
+        """
+        selected_suggestion_index = listbox_suggestion_emails.curselection()
+
+        if selected_suggestion_index:
+            selected_suggestion_name = listbox_suggestion_emails.get(selected_suggestion_index[0])
+
+            # Reset e riempimento in `email_entry`
+            email_entry.delete(0, tk.END)
+            email_entry.insert(0, selected_suggestion_name)
+
+            listbox_frame.place_forget()
 
     def show_email_and_threshold_menu(event):
         """
@@ -723,10 +791,24 @@ def open_advanced_dialog(parent_dialog):
     container.grid(row=0, column=0, sticky="nsew")
 
     # E-mail
-    ttk.Label(container, text="Email:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
+    ttk.Label(container, text="E-mail:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
 
-    email_entry = ttk.Entry(container, width=40, font=common_font)
+    email_entry_var = tk.StringVar()
+    email_entry_var.trace_add("write", update_suggestions) # Regola per eseguire una funzione quando il contenuto di un widget cambia
+
+    email_entry = ttk.Entry(container, width=40, textvariable=email_entry_var, font=common_font)
     email_entry.grid(row=0, column=1, padx=10, pady=10, sticky="w")
+
+    # Lista suggerimenti
+    listbox_frame = ttk.Frame(advanced_dialog)
+    listbox_frame.place_forget()
+
+    listbox_suggestion_emails = tk.Listbox(listbox_frame, width=40)
+    listbox_suggestion_emails.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical", command=listbox_suggestion_emails.yview)
+    scrollbar.pack(side="right", fill="y")
+    listbox_suggestion_emails.config(yscrollcommand=scrollbar.set)
 
     # Soglia
     ttk.Label(container, text="Soglia:").grid(row=1, column=0, padx=10, pady=10, sticky="we")
@@ -757,7 +839,7 @@ def open_advanced_dialog(parent_dialog):
     # Timer aggiornamento
     ttk.Label(container, text="Timer [s]:").grid(row=5, column=0, padx=10, pady=(20, 10), sticky="we")
     
-    timer_entry = ttk.Entry(container, width=20, font=common_font, validate="key", validatecommand=(root.register(validate_timer_input), "%P"))
+    timer_entry = ttk.Entry(container, width=20, font=common_font, validate="key", validatecommand=(root.register(is_valid_timer), "%P"))
     timer_entry.grid(row=5, column=1, padx=10, pady=10, sticky="w")
     timer_entry.insert(0, timer_refresh)
 
@@ -770,6 +852,10 @@ def open_advanced_dialog(parent_dialog):
     advanced_dialog.bind("<Button-1>", click_email_and_threshold_tree)
 
     email_entry.bind("<Button-3>", lambda e: show_text_menu(e, email_entry))
+    email_entry.bind("<FocusIn>", update_suggestions)
+    email_entry.bind("<FocusOut>", hide_suggestions)
+
+    listbox_suggestion_emails.bind("<<ListboxSelect>>", on_select_suggestion)
 
     threshold_entry.bind("<Button-3>", lambda e: show_text_menu(e, threshold_entry))
 
@@ -852,6 +938,8 @@ def open_add_product_dialog():
         """
         Aggiunge i dettagli di un prodotto
         """
+        global suggestion_emails
+
         if not name or not url:
             messagebox.showwarning("Attenzione", "Compila tutti i campi!")
             return False
@@ -872,8 +960,27 @@ def open_add_product_dialog():
         current_price = get_price(url)
 
         if current_price is None:
-            current_price = "Aggiorna o verifica url: - "
-            messagebox.showwarning("Attenzione", "Non è stato trovato il prezzo sulla pagina!\nAggiorna o verifica url")
+            current_price = "aggiorna o verifica l'URL: - "
+            messagebox.showwarning("Attenzione", "Non è stato trovato il prezzo sulla pagina!\naggiorna o verifica l'URL")
+        
+        # Verifica se una delle sogle impostate è più alta del prezzo corrente
+        for threshold in emails_and_thresholds.values():
+            if threshold > current_price:
+                continueToAddProduct = messagebox.askyesno(
+                    "Conferma soglia",
+                    "La soglia di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
+                    if len(emails_and_thresholds) > 1 
+                    else "Una delle soglie di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
+                )
+
+                # Verifica risposta
+                if not continueToAddProduct:
+                    # Sblocca la Root per consentire ulteriori interazioni
+                    unlock_root()
+
+                    return
+                
+                break
 
         # Crea il nuovo prodotto da aggiungere alla lista
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -891,6 +998,11 @@ def open_add_product_dialog():
         save_products_data()
         save_prices_data(name, products[name]["price"])
 
+        # Riempi la lista delle email di suggerimento
+        for email in products[name]['emails_and_thresholds']:
+            if email not in suggestion_emails:
+                suggestion_emails.append(email)
+
         # Reset dei filtri al seguito dell'aggiunta del prodotto
         reset_filters()
 
@@ -899,6 +1011,7 @@ def open_add_product_dialog():
 
         logger.info(f"Prodotto '{name}' aggiunto con successo")
 
+        root.focus_force()  # Forza il focus sulla finestra principale
         add_product_dialog.destroy()
 
     global emails_and_thresholds, timer_refresh, notify
@@ -1164,6 +1277,8 @@ def open_edit_product_dialog():
         """
         Modifica i dettagli di un prodotto esistente
         """
+        global suggestion_emails
+
         if not new_url:
             messagebox.showwarning("Attenzione", "Compila l'URL!")
             return False
@@ -1191,6 +1306,25 @@ def open_edit_product_dialog():
         else:
             products[name]["price"] = new_price
 
+        # Verifica se una delle sogle impostate è più alta del nuovo prezzo
+        for threshold in emails_and_thresholds.values():
+            if threshold > new_price:
+                continueToEditProduct = messagebox.askyesno(
+                    "Conferma soglia",
+                    "La soglia di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
+                    if len(emails_and_thresholds) > 1 
+                    else "Una delle soglie di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
+                )
+
+                # Verifica risposta
+                if not continueToEditProduct:
+                    # Sblocco della Root al termine della modifica del prodotto
+                    unlock_root()
+
+                    return
+                
+                break
+
         products[name]["url"] = new_url
         products[name]["notify"] = notify.get()
         products[name]["timer"] = time.time()
@@ -1201,6 +1335,11 @@ def open_edit_product_dialog():
         save_products_data()
         save_prices_data(name, products[name]["price"])
 
+        # Riempi la lista delle email di suggerimento
+        for email in products[name]['emails_and_thresholds']:
+            if email not in suggestion_emails:
+                suggestion_emails.append(email)
+
         # Reset dei filtri al seguito della modifica del prodotto
         reset_filters()
 
@@ -1209,6 +1348,7 @@ def open_edit_product_dialog():
 
         logger.info(f"Prodotto '{name}' modificato con successo")
 
+        root.focus_force()  # Forza il focus sulla finestra principale
         edit_product_dialog.destroy()
 
     global emails_and_thresholds, timer_refresh, notify
@@ -1299,7 +1439,7 @@ def remove_products():
     num_selected = len(selected_products)
 
     # Finestra di conferma per la rimozione dei prodotti
-    response = messagebox.askyesno(
+    continueToRemoveProduct = messagebox.askyesno(
         "Conferma rimozione",
         f"Sei sicuro di voler rimuovere i {num_selected} prodotti selezionati?" 
         if num_selected > 1 
@@ -1307,7 +1447,7 @@ def remove_products():
     )
 
     # Verifica risposta
-    if response:
+    if continueToRemoveProduct:
         # Reset dei filtri prima della rimozione dei prodotti
         reset_filters()
 
@@ -1367,7 +1507,7 @@ def open_progress_dialog(update_all=True):
                 if current_price is None:
                     logger.warning(f"Prodotto '{name}' non aggiornato: non trovato il prezzo sulla pagina {products[name]['url']}")
                     
-                    products[name]["price"] = "Aggiorna o verifica url: - "
+                    products[name]["price"] = "aggiorna o verifica l'URL: - "
                     products[name]["timer"] = time.time()
                     products[name]["date_edited"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -1437,7 +1577,9 @@ def open_progress_dialog(update_all=True):
         # Sblocco della Root al termine dell'aggiornamento dei prezzi
         unlock_root()
 
+        root.focus_force()  # Forza il focus sulla finestra principale
         loading_dialog.destroy()
+
 
     # Dialog per informazioni sul caricamento
     loading_dialog = tk.Toplevel(root)
@@ -1675,9 +1817,10 @@ def click(event):
             products_tree.selection_remove(*selected_products)
             products_tree.selection_add(products_in_tree_view[current_index])
     else:
-        products_tree.selection_remove(*selected_products)
+        if not isinstance(event.widget, ttk.Button):
+            products_tree.selection_remove(*selected_products)
 
-        current_index = None
+            current_index = None
 
 
 def double_click(event):
@@ -1963,30 +2106,6 @@ def set_periodic_refresh_root(update=True):
     Se `update` è True, abilita i controlli, resettando i thread che monitorano i prodotti e avviando il refresh periodico
     Se `update` è False, disabilita i controlli e ferma i thread che monitorano i prodotti
     """
-    def disable_controls():
-        """
-        Disabilita i controlli dell'interfaccia utente
-        """
-        add_button.config(state="disabled")
-        view_button.config(state="disabled")
-        edit_button.config(state="disabled")
-        remove_button.config(state="disabled")
-        update_button.config(state="disabled")
-        update_all_button.config(state="disabled")
-        search_entry.config(state="disabled")
-
-    def enable_controls():
-        """
-        Abilita i controlli dell'interfaccia utente
-        """
-        add_button.config(state="normal")
-        view_button.config(state="normal")
-        edit_button.config(state="normal")
-        remove_button.config(state="normal")
-        update_button.config(state="normal")
-        update_all_button.config(state="normal")
-        search_entry.config(state="normal")
-
     def reset_threads():
         """
         Reset dei thread che monitorano i prodotti
@@ -2008,11 +2127,9 @@ def set_periodic_refresh_root(update=True):
     if update:
         is_possible_to_refresh_root = True
         periodic_refresh_root()
-        enable_controls()
         reset_threads()
     else:
         is_possible_to_refresh_root = False
-        disable_controls()
         stop_threads()
 
 
@@ -2037,6 +2154,8 @@ sort_state = {
     "column": None,
     "order": 0,  # 0: nessun ordinamento, 1: crescente, 2: decrescente
 }
+
+suggestion_emails = []
 
 common_font = ("Arial", 10)
 
@@ -2099,7 +2218,7 @@ frame_products_list = tk.Frame(root)
 frame_products_list.pack(fill="both", expand=True, padx=(15, 10), pady=(10, 0))
 
 products_tree = ttk.Treeview(frame_products_list, columns=columns, show="headings", selectmode="none")
-products_tree.grid(row=0, column=0, sticky="nsew")  # Posiziona la Treeview nella griglia
+products_tree.grid(row=0, column=0, sticky="nsew")
 
 for col in columns:
     products_tree.heading(col, text=col, anchor="center", command=lambda _col=col: sort_by_column(_col))
@@ -2139,11 +2258,11 @@ multi_selection_menu.add_command(label="Aggiorna selezionati", command=lambda: o
 # Definizione eventi root e product_tree
 root.bind("<Control-a>", select_all_products)
 root.bind("<Configure>", update_tree_view_columns_width)
+root.bind("<Button-1>", click)
 
 search_entry.bind("<KeyRelease>", lambda e: update_products_to_view())
 search_entry.bind("<Button-3>", lambda e: show_text_menu(e, search_entry))
 
-products_tree.bind("<Button-1>", click)
 products_tree.bind("<Double-1>", double_click)
 products_tree.bind("<Return>", show_product_details)
 products_tree.bind("<Shift-Button-1>", shift_click)
