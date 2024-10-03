@@ -31,17 +31,15 @@ os.makedirs(log_dir, exist_ok=True)
 logger = logging.getLogger("logger")
 logger.setLevel(logging.WARNING)
 logger_handler = logging.FileHandler(os.path.join(log_dir, "logger.log"))
-logger_handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-)
+logger_handler.setFormatter(    logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 logger.addHandler(logger_handler)
 
 
-def load_products_data():
+def load_products():
     """
     Carica i dati dei prodotti da file e avvia il monitoraggio per ogni prodotto
     """
-    global products, products_to_view, suggestion_emails
+    global products, products_to_view
 
     if os.path.exists(products_file):
         try:
@@ -60,11 +58,6 @@ def load_products_data():
                     
                     # Avvio monitoraggio del prodotto estratto
                     start_tracking(name, url)
-
-                    # Riempi la lista delle email di suggerimento
-                    for email in products[name]['emails_and_thresholds']:
-                        if email not in suggestion_emails:
-                            suggestion_emails.append(email)
 
                 # Aggiornamento prodotti da visualizzare sulla TreeView
                 products_to_view = products
@@ -88,7 +81,7 @@ def load_products_data():
             exit()
 
 
-def save_products_data():
+def save_products():
     """
     Salva i dati dei prodotti su file
     """
@@ -107,7 +100,53 @@ def save_products_data():
         logger.error(f"Errore nel salvataggio dei dati prodotti: {e}")
 
 
-def load_prices_data():
+def load_emails():
+    """
+    Carica i dati delle email da file e avvia il monitoraggio per ogni prodotto
+    """
+    global emails
+
+    if os.path.exists(emails_file):
+        try:
+            with open(emails_file, "r") as file:
+                lines = file.readlines()
+            
+            emails = [line.strip() for line in lines]
+
+            logger.info("Email caricate correttamente")
+        except Exception as e:
+            logger.error(f"Errore durante il caricamento delle email: {e}")
+            messagebox.showerror("Attenzione", "Errore durante il caricamento delle email")
+            exit()
+    else:
+        try:
+            with open(emails_file, "w") as file:
+                pass
+            
+                logger.warning(f"File delle email '{emails_file}' non trovato, creato nuovo file vuoto")
+                messagebox.showwarning("Attenzione", f"File delle email '{emails_file}' non trovato\nCreato nuovo file vuoto")
+        except Exception as e:
+            logger.error(f"Errore durante la creazione del file delle email: {e}")
+            messagebox.showerror("Attenzione", "Errore durante la creazione del file delle email")
+            exit()
+
+
+def save_emails():
+    """
+    Salva i dati delle email su file
+    """
+    try:
+        # Salvataggio su file
+        with open(emails_file, 'w') as file:
+            for line in emails:
+                file.write(line + '\n')
+
+        logger.info("Email salvate con successo")
+    except Exception as e:
+        logger.error(f"Errore nel salvataggio delle email: {e}")
+
+
+def load_prices():
     """
     Carica i dati di monitoraggio dei prezzi da file
     """
@@ -142,7 +181,21 @@ def load_prices_data():
             exit()
 
 
-def save_prices_data(name, price):
+def save_prices():
+    """
+    Salva i dati di monitoraggio dei prezzi dei prodotti su file
+    """
+    try:
+        # Salvataggio su file
+        with open(prices_file, "w") as file:
+            json.dump(prices, file, indent=4)
+
+        logger.info("Dati di monitoraggio dei prezzi dei prodotti salvati con successo")
+    except Exception as e:
+        logger.error(f"Errore nel salvataggio dei dati di monitoraggio dei prezzi dei prodotti: {e}")
+
+
+def save_price(name, price):
     """
     Salva i dati di monitoraggio del prezzo per un prodotto su file
     """
@@ -164,6 +217,114 @@ def save_prices_data(name, price):
         logger.info(f"Salvato aggiornamento prezzo per {name}: {price}€ al {current_time}")
     except Exception as e:
         logger.error(f"Errore nel salvataggio dei dati monitoraggio prezzi: {e}")
+
+
+def check_and_save_new_emails():
+    """
+    Controlla le email associate ai prodotti e aggiorna la lista delle email usate come cronologia
+    """
+    global emails
+
+    for name in products:
+        emails_and_thresholds = products[name]['emails_and_thresholds']
+
+        for email in emails_and_thresholds:
+            if email not in emails:
+                emails.append(email)
+
+    save_emails()
+
+
+def clean_products_and_prices_history():
+    """
+    Rimuove dalla cronologia di monitoraggio dei prezzi tutti i prodotti che non sono più osservati
+    """
+    continueCleanProductsAndPricesHistory = messagebox.askyesno(
+                        "Pulizia cronologia",
+                        "Sei sicuro di voler rimuovere dalla cronologia i prodotti non osservati e i relativi prezzi memorizzati?" 
+                    )
+
+    # Verifica risposta
+    if continueCleanProductsAndPricesHistory:
+        name_products = products.keys()
+        name_prices = list(prices.keys())
+
+        for name_price in name_prices:
+            if name_price not in name_products:
+                del prices[name_price]
+
+        save_prices()
+
+
+def clean_emails_history():
+    """
+    Ripulisce la lista delle email, rimuovendo quelle non più associate a prodotti monitorati
+    """
+    global emails
+
+    continueCleanEmailsHistory = messagebox.askyesno(
+                        "Pulizia cronologia",
+                        "Sei sicuro di voler rimuovere dalla cronologia le email non più utilizzate?" 
+                    )
+
+    # Verifica risposta
+    if continueCleanEmailsHistory:
+        emails.clear()
+
+        for name in products:
+            emails_and_thresholds = products[name]['emails_and_thresholds']
+
+            for email in emails_and_thresholds:
+                if email not in emails:
+                    emails.append(email)
+        
+        save_emails()
+
+
+def center_window(window):
+    """
+    Centra una finestra Tkinter sullo schermo
+    """
+    window.update_idletasks()
+
+    width = window.winfo_width()
+    height = window.winfo_height()
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+
+    x = (screen_width // 2) - (width // 2)
+    y = (screen_height // 2) - (height // 2)
+    window.geometry(f"{width}x{height}+{x}+{y}")
+
+
+def open_about_dialog():
+    """
+    Crea una finestra modale con informazioni personali e di release.
+    """
+    # Creazione della finestra modale
+    about_dialog = tk.Toplevel(root)
+    about_dialog.title("Info")
+    about_dialog.resizable(False, False)
+    about_dialog.configure(padx=50, pady=5)
+    about_dialog.grab_set()
+
+    # Label con il nome dell'utente
+    name_label = tk.Label(about_dialog, text="Vincenzo Salvati", font=("Arial", 14, "bold"))
+    name_label.pack(pady=10)
+
+    # Label con il numero di versione/release
+    release_label = tk.Label(about_dialog, text="Versione: 3.2.0", font=("Arial", 12))
+    release_label.pack(pady=5)
+
+    # Label con un eventuale numero di release successiva
+    release_note_label = tk.Label(about_dialog, text="Ultima release: 3 ottobre 2024", font=("Arial", 10))
+    release_note_label.pack(pady=5)
+
+    # Pulsante per chiudere la finestra modale
+    close_button = ttk.Button(about_dialog, text="Chiudi", command=about_dialog.destroy)
+    close_button.pack(pady=15)
+
+    center_window(about_dialog)
 
 
 def reset_filters(reset_search_bar=True):
@@ -453,8 +614,8 @@ def start_tracking(name, url):
             # Aggiornamento del prodotto
             products[name]["price"] = current_price
 
-            save_prices_data(name, products[name]["price"])
-            save_products_data()
+            save_price(name, products[name]["price"])
+            save_products()
 
         # Ripeti il loop finchè l'evento non viene settato
         while not stop_events[name].is_set():
@@ -491,22 +652,6 @@ def start_tracking(name, url):
     threads[name].start()
 
     logger.info(f"Avviato il monitoraggio per '{name}' ({url}) con un nuovo timer")
-
-
-def center_window(window):
-    """
-    Centra una finestra Tkinter sullo schermo
-    """
-    window.update_idletasks()
-
-    width = window.winfo_width()
-    height = window.winfo_height()
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-
-    x = (screen_width // 2) - (width // 2)
-    y = (screen_height // 2) - (height // 2)
-    window.geometry(f"{width}x{height}+{x}+{y}")
 
 
 def block_root():
@@ -672,7 +817,7 @@ def open_advanced_dialog(parent_dialog):
 
         if typed_text:
             # Ricerca dei nomi dei prodotti che contengono il testo digitato
-            matching_suggestions = [email for email in suggestion_emails if typed_text in email.lower()]
+            matching_suggestions = [email for email in emails if typed_text in email.lower()]
 
             # Aggiunta del testo corrente alla lista dei suggerimenti qual'ora non fosse già presente
             if email_entry.get() not in matching_suggestions:
@@ -796,14 +941,14 @@ def open_advanced_dialog(parent_dialog):
     email_entry_var = tk.StringVar()
     email_entry_var.trace_add("write", update_suggestions) # Regola per eseguire una funzione quando il contenuto di un widget cambia
 
-    email_entry = ttk.Entry(container, width=40, textvariable=email_entry_var, font=common_font)
+    email_entry = ttk.Entry(container, width=50, textvariable=email_entry_var, font=("Arial", 10))
     email_entry.grid(row=0, column=1, padx=10, pady=10, sticky="w")
 
     # Lista suggerimenti
     listbox_frame = ttk.Frame(advanced_dialog)
     listbox_frame.place_forget()
 
-    listbox_suggestion_emails = tk.Listbox(listbox_frame, width=40)
+    listbox_suggestion_emails = tk.Listbox(listbox_frame, width=50)
     listbox_suggestion_emails.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical", command=listbox_suggestion_emails.yview)
@@ -813,8 +958,14 @@ def open_advanced_dialog(parent_dialog):
     # Soglia
     ttk.Label(container, text="Soglia:").grid(row=1, column=0, padx=10, pady=10, sticky="we")
 
-    threshold_entry = ttk.Entry(container, width=20, font=common_font, validate="key", validatecommand=(root.register(lambda s: s.isdigit() or s in [".", "-"]), "%S"))
-    threshold_entry.grid(row=1, column=1, padx=10, pady=10, sticky="w")
+    # Frame per Entry e messaggio
+    threshold_frame = ttk.Frame(container)
+    threshold_frame.grid(row=1, column=1, padx=10, pady=10, sticky="w")
+
+    threshold_entry = ttk.Entry(threshold_frame, width=15, font=("Arial", 10), validate="key", validatecommand=(root.register(lambda s: s.isdigit() or s in [".", "-"]), "%S"))
+    threshold_entry.pack(side="left")
+
+    ttk.Label(threshold_frame, text="Inserisci un valore numerico oppure lascia vuoto", font=("Arial", 8, "italic")).pack(side="left", padx=(10, 0))
 
     # Pulsante
     add_button = ttk.Button(container, text="Aggiungi", command=add_email_threshold)
@@ -837,9 +988,9 @@ def open_advanced_dialog(parent_dialog):
     email_and_threshold_tree.tag_configure("hover", background="#cceeff")
 
     # Timer aggiornamento
-    ttk.Label(container, text="Timer [s]:").grid(row=5, column=0, padx=10, pady=(20, 10), sticky="we")
+    ttk.Label(container, text="Timer [s]:").grid(row=5, column=0, padx=10, pady=10, sticky="we")
     
-    timer_entry = ttk.Entry(container, width=20, font=common_font, validate="key", validatecommand=(root.register(is_valid_timer), "%P"))
+    timer_entry = ttk.Entry(container, width=20, font=("Arial", 10), validate="key", validatecommand=(root.register(is_valid_timer), "%P"))
     timer_entry.grid(row=5, column=1, padx=10, pady=10, sticky="w")
     timer_entry.insert(0, timer_refresh)
 
@@ -938,8 +1089,6 @@ def open_add_product_dialog():
         """
         Aggiunge i dettagli di un prodotto
         """
-        global suggestion_emails
-
         if not name or not url:
             messagebox.showwarning("Attenzione", "Compila tutti i campi!")
             return False
@@ -962,25 +1111,28 @@ def open_add_product_dialog():
         if current_price is None:
             current_price = "aggiorna o verifica l'URL: - "
             messagebox.showwarning("Attenzione", "Non è stato trovato il prezzo sulla pagina!\naggiorna o verifica l'URL")
-        
-        # Verifica se una delle sogle impostate è più alta del prezzo corrente
-        for threshold in emails_and_thresholds.values():
-            if threshold > current_price:
-                continueToAddProduct = messagebox.askyesno(
-                    "Conferma soglia",
-                    "La soglia di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
-                    if len(emails_and_thresholds) > 1 
-                    else "Una delle soglie di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
-                )
+        else:
+            # Verifica se una delle sogle impostate è più alta del prezzo corrente
+            for threshold in emails_and_thresholds.values():
+                if threshold > current_price:
+                    continueToAddProduct = messagebox.askyesno(
+                        "Conferma soglia",
+                        "La soglia di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
+                        if len(emails_and_thresholds) > 1 
+                        else "Una delle soglie di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
+                    )
 
-                # Verifica risposta
-                if not continueToAddProduct:
-                    # Sblocca la Root per consentire ulteriori interazioni
-                    unlock_root()
+                    # Verifica risposta
+                    if not continueToAddProduct:
+                        # Sblocca la Root per consentire ulteriori interazioni
+                        unlock_root()
 
-                    return
-                
-                break
+                        # Consenti la modifica della soglia
+                        open_advanced_dialog()
+                        return
+                    
+                    # E' inutile controllare altro se non importa che una delle soglie sia più alta del prezzo corrente
+                    break
 
         # Crea il nuovo prodotto da aggiungere alla lista
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -995,13 +1147,9 @@ def open_add_product_dialog():
             "emails_and_thresholds": emails_and_thresholds,
         }
 
-        save_products_data()
-        save_prices_data(name, products[name]["price"])
-
-        # Riempi la lista delle email di suggerimento
-        for email in products[name]['emails_and_thresholds']:
-            if email not in suggestion_emails:
-                suggestion_emails.append(email)
+        save_products()
+        save_price(name, products[name]["price"])
+        check_and_save_new_emails()
 
         # Reset dei filtri al seguito dell'aggiunta del prodotto
         reset_filters()
@@ -1037,7 +1185,7 @@ def open_add_product_dialog():
     name_entry_var = tk.StringVar()
     name_entry_var.trace_add("write", update_suggestions) # Regola per eseguire una funzione quando il contenuto di un widget cambia
 
-    name_entry = ttk.Entry(container, width=80, font=common_font, textvariable=name_entry_var, validate="key", validatecommand=limit_letters)
+    name_entry = ttk.Entry(container, width=80, font=("Arial", 10), textvariable=name_entry_var, validate="key", validatecommand=limit_letters)
     name_entry.grid(row=0, column=1, padx=10, pady=10, sticky="w")
 
     # Lista suggerimenti
@@ -1057,7 +1205,7 @@ def open_add_product_dialog():
     text_frame = ttk.Frame(container)
     text_frame.grid(row=1, column=1, padx=10, pady=10, sticky="we")
 
-    url_text = tk.Text(text_frame, height=5, width=80, font=common_font)
+    url_text = tk.Text(text_frame, height=5, width=80, font=("Arial", 10))
     url_text.pack(side="left", fill="both", expand=True)
 
     scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=url_text.yview)
@@ -1223,9 +1371,6 @@ def show_product_details(event=None):
     details_dialog.grab_set()
 
     # Visualizzazione dei dettagli del prodotto
-    name_font = ("Helvetica", 12, "bold")
-    highlight_font = ("Helvetica", 14, "bold")
-
     top_frame = ttk.Frame(details_dialog)
     top_frame.pack(fill="x", pady=10)
     
@@ -1233,11 +1378,11 @@ def show_product_details(event=None):
     top_frame.grid_columnconfigure(1, weight=1)
     top_frame.grid_columnconfigure(2, weight=0)
 
-    ttk.Label(top_frame, text=name, font=name_font).grid(row=0, column=0, sticky="w")
+    ttk.Label(top_frame, text=name, font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w")
 
     ttk.Button(top_frame, text="Visualizza Grafico", command=lambda: open_prices_graph_panel(name)).grid(row=0, column=1, sticky="e")
 
-    url_label = ttk.Label(top_frame, text=truncated_url, font=common_font, foreground="blue", cursor="hand2")
+    url_label = ttk.Label(top_frame, text=truncated_url, font=("Arial", 10), foreground="blue", cursor="hand2")
     url_label.grid(row=1, column=0, sticky="w")
 
     ttk.Button(top_frame, text="Copia URL", command=lambda: copy_to_clipboard(url)).grid(row=1, column=1, sticky="e")
@@ -1246,19 +1391,19 @@ def show_product_details(event=None):
     prices_frame = ttk.Frame(details_dialog)
     prices_frame.pack(anchor="w", padx=10)
 
-    ttk.Label(prices_frame, text=f"Prezzo Attuale: {current_price:.2f}€" if isinstance(current_price, (int, float)) else "Prezzo Attuale: -", font=highlight_font, foreground=color_suggestion).grid(row=0, column=0, sticky="w", pady=(5, 10))
+    ttk.Label(prices_frame, text=f"Prezzo Attuale: {current_price:.2f}€" if isinstance(current_price, (int, float)) else "Prezzo Attuale: -", font=("Arial", 14, "bold"), foreground=color_suggestion).grid(row=0, column=0, sticky="w", pady=(5, 10))
     
-    ttk.Label(prices_frame, text="Prezzo Medio:", font=common_font).grid(row=1, column=0, sticky="w", pady=5)
-    ttk.Label(prices_frame, text=f"{average_price:.2f}€" if isinstance(average_price, (int, float)) else "-", font=common_font).grid(row=1, column=1, sticky="e", pady=5)
+    ttk.Label(prices_frame, text="Prezzo Medio:", font=("Arial", 10)).grid(row=1, column=0, sticky="w", pady=5)
+    ttk.Label(prices_frame, text=f"{average_price:.2f}€" if isinstance(average_price, (int, float)) else "-", font=("Arial", 10)).grid(row=1, column=1, sticky="e", pady=5)
 
-    ttk.Label(prices_frame, text="Prezzo Minimo Storico:", font=common_font).grid(row=2, column=0, sticky="w", pady=5)
-    ttk.Label(prices_frame, text=f"{price_minimum:.2f}€" if isinstance(price_minimum, (int, float)) else "-", font=common_font).grid(row=2, column=1, sticky="e", pady=5)
+    ttk.Label(prices_frame, text="Prezzo Minimo Storico:", font=("Arial", 10)).grid(row=2, column=0, sticky="w", pady=5)
+    ttk.Label(prices_frame, text=f"{price_minimum:.2f}€" if isinstance(price_minimum, (int, float)) else "-", font=("Arial", 10)).grid(row=2, column=1, sticky="e", pady=5)
 
-    ttk.Label(prices_frame, text="Prezzo Massimo Storico:", font=common_font).grid(row=3, column=0, sticky="w", pady=5)
-    ttk.Label(prices_frame, text=f"{price_maximum:.2f}€" if isinstance(price_maximum, (int, float)) else "-", font=common_font).grid(row=3, column=1, sticky="e", pady=5)
+    ttk.Label(prices_frame, text="Prezzo Massimo Storico:", font=("Arial", 10)).grid(row=3, column=0, sticky="w", pady=5)
+    ttk.Label(prices_frame, text=f"{price_maximum:.2f}€" if isinstance(price_maximum, (int, float)) else "-", font=("Arial", 10)).grid(row=3, column=1, sticky="e", pady=5)
     
     # Visualizzazione del cosniglio sull'acquisto
-    ttk.Label(details_dialog, text=text_suggestion, font=name_font, foreground=color_suggestion).pack(pady=10)
+    ttk.Label(details_dialog, text=text_suggestion, font=("Arial", 12, "bold"), foreground=color_suggestion).pack(pady=10)
 
     # Pulsante chiusura finestra
     ttk.Button(details_dialog, text="Chiudi", command=details_dialog.destroy).pack(pady=10)
@@ -1277,8 +1422,6 @@ def open_edit_product_dialog():
         """
         Modifica i dettagli di un prodotto esistente
         """
-        global suggestion_emails
-
         if not new_url:
             messagebox.showwarning("Attenzione", "Compila l'URL!")
             return False
@@ -1306,24 +1449,26 @@ def open_edit_product_dialog():
         else:
             products[name]["price"] = new_price
 
-        # Verifica se una delle sogle impostate è più alta del nuovo prezzo
-        for threshold in emails_and_thresholds.values():
-            if threshold > new_price:
-                continueToEditProduct = messagebox.askyesno(
-                    "Conferma soglia",
-                    "La soglia di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
-                    if len(emails_and_thresholds) > 1 
-                    else "Una delle soglie di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
-                )
+            # Verifica se una delle sogle impostate è più alta del nuovo prezzo
+            for threshold in emails_and_thresholds.values():
+                if threshold > new_price:
+                    continueToEditProduct = messagebox.askyesno(
+                        "Conferma soglia",
+                        "La soglia di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
+                        if len(emails_and_thresholds) > 1 
+                        else "Una delle soglie di notifica che hai inserito è più alta del prezzo attuale.\nInserire comunque il prodotto con questa specifica?" 
+                    )
 
-                # Verifica risposta
-                if not continueToEditProduct:
-                    # Sblocco della Root al termine della modifica del prodotto
-                    unlock_root()
-
-                    return
-                
-                break
+                    # Verifica risposta
+                    if not continueToEditProduct:
+                        # Sblocco della Root al termine della modifica del prodotto
+                        unlock_root()
+                        # Consenti la modifica della soglia
+                        open_advanced_dialog()
+                        return
+                    
+                    # E' inutile controllare altro se non importa che una delle soglie sia più alta del prezzo corrente
+                    break
 
         products[name]["url"] = new_url
         products[name]["notify"] = notify.get()
@@ -1332,13 +1477,9 @@ def open_edit_product_dialog():
         products[name]["date_edited"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         products[name]["emails_and_thresholds"] = emails_and_thresholds
 
-        save_products_data()
-        save_prices_data(name, products[name]["price"])
-
-        # Riempi la lista delle email di suggerimento
-        for email in products[name]['emails_and_thresholds']:
-            if email not in suggestion_emails:
-                suggestion_emails.append(email)
+        save_products()
+        save_price(name, products[name]["price"])
+        check_and_save_new_emails()
 
         # Reset dei filtri al seguito della modifica del prodotto
         reset_filters()
@@ -1376,7 +1517,7 @@ def open_edit_product_dialog():
     # Nome prodotto
     ttk.Label(container, text="Nome Prodotto:").grid(row=0, column=0, padx=10, pady=10, sticky="we")
 
-    text_widget = tk.Text(container, font=common_font, height=1, width=80, wrap="none", bd=0, bg="white")
+    text_widget = tk.Text(container, font=("Arial", 10), height=1, width=80, wrap="none", bd=0, bg="white")
     text_widget.grid(row=0, column=1, padx=10, pady=10, sticky="w")
     text_widget.insert(tk.END, selected_name)
     text_widget.config(state=tk.DISABLED)
@@ -1387,7 +1528,7 @@ def open_edit_product_dialog():
     text_frame = ttk.Frame(container)
     text_frame.grid(row=1, column=1, padx=10, pady=10, sticky="we")
 
-    url_text = tk.Text(text_frame, height=5, width=80, font=common_font)
+    url_text = tk.Text(text_frame, height=5, width=80, font=("Arial", 10))
     url_text.pack(side="left", fill="both", expand=True)
     url_text.insert("1.0", selected_url)
 
@@ -1464,7 +1605,7 @@ def remove_products():
 
             hovered_row_products_tree = None
 
-            save_products_data()
+            save_products()
 
             logger.info(f"Prodotto '{name}' rimosso con successo")
 
@@ -1529,9 +1670,9 @@ def open_progress_dialog(update_all=True):
                     if products[name]["notify"]:
                         send_notification_and_email(name, previous_price, current_price)
 
-                save_prices_data(name, products[name]["price"])
+                save_price(name, products[name]["price"])
 
-            save_products_data()
+            save_products()
 
             # Impostazione dei valori limite per la barra di progresso
             loading_dialog.progress_label.config(text=f"Invio di eventuali notifiche...")
@@ -2147,6 +2288,9 @@ prices_file = "prices.json"
 prices = {}
 prices_graph_application = None
 
+emails_file = "emails.json"
+emails = []
+
 threads = {}
 stop_events = {}
 
@@ -2154,10 +2298,6 @@ sort_state = {
     "column": None,
     "order": 0,  # 0: nessun ordinamento, 1: crescente, 2: decrescente
 }
-
-suggestion_emails = []
-
-common_font = ("Arial", 10)
 
 current_index = None
 
@@ -2175,6 +2315,32 @@ root.minsize(900, 300)
 root.wm_state("zoomed")
 
 limit_letters = (root.register(lambda s: len(s) <= 50), "%P") # Regola per limitare i caratteri da inserire
+
+# Creazione della barra di menu
+menu_bar = tk.Menu(root)
+
+# Menu "File"
+file_menu = tk.Menu(menu_bar, tearoff=0)
+file_menu.add_command(label="Nuovo", command=open_add_product_dialog)
+file_menu.add_separator()
+file_menu.add_command(label="Esci", command=root.quit)
+
+# Menu "Impostazioni"
+history_menu = tk.Menu(menu_bar, tearoff=0)
+history_menu.add_command(label="Pulisci cronologia prodotti non osservati", command=clean_products_and_prices_history)
+history_menu.add_command(label="Pulisci cronologia email non utilizzate", command=clean_emails_history)
+
+# Menu "Aiuto"
+help_menu = tk.Menu(menu_bar, tearoff=0)
+help_menu.add_command(label="Info", command=open_about_dialog)
+
+# Aggiungi il menu "Modifica" alla barra di menu
+menu_bar.add_cascade(label="File", menu=file_menu)
+menu_bar.add_cascade(label="Impostazioni", menu=history_menu)
+menu_bar.add_cascade(label="Aiuto", menu=help_menu)
+
+# Configura la barra di menu nell'interfaccia principale
+root.config(menu=menu_bar)
 
 # Pulsanti
 button_frame = ttk.Frame(root)
@@ -2204,9 +2370,9 @@ update_all_button.grid(row=2, column=6, padx=5, pady=5, sticky="e")
 search_frame = ttk.Frame(root)
 search_frame.pack(fill="x", padx=5, pady=0)
 
-ttk.Label(search_frame, text="Ricerca Prodotto:", font=common_font).grid(row=0, column=0, padx=10, pady=10, sticky="we")
+ttk.Label(search_frame, text="Ricerca Prodotto:", font=("Arial", 10)).grid(row=0, column=0, padx=10, pady=10, sticky="we")
 
-search_entry = ttk.Entry(search_frame, width=79, font=common_font, validate="key", validatecommand=limit_letters)
+search_entry = ttk.Entry(search_frame, width=79, font=("Arial", 10), validate="key", validatecommand=limit_letters)
 search_entry.grid(row=0, column=1, padx=10, pady=10, sticky="we")
 
 # Configura lo stile della Treeview
@@ -2214,7 +2380,7 @@ style = ttk.Style()
 style.configure("Treeview", rowheight=25)
 
 # Lista prodotti
-frame_products_list = tk.Frame(root)
+frame_products_list = ttk.Frame(root)
 frame_products_list.pack(fill="both", expand=True, padx=(15, 10), pady=(10, 0))
 
 products_tree = ttk.Treeview(frame_products_list, columns=columns, show="headings", selectmode="none")
@@ -2239,7 +2405,7 @@ products_tree.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=sc
 products_tree.tag_configure("hover", background="#cceeff")
 
 # Footer
-frame_footer = tk.Frame(root)
+frame_footer = ttk.Frame(root)
 frame_footer.pack(side="bottom", fill="x", padx=(20, 40), pady=2)
 
 creator_label = tk.Label(frame_footer, text="Prodotto da Vincenzo Salvati", font=("Arial", 8))
@@ -2273,8 +2439,11 @@ products_tree.bind("<Button-3>", show_tree_view_menu)
 products_tree.bind("<Motion>", on_hover_products_tree)
 
 # Carica i dati
-load_products_data()
-load_prices_data()
+load_products()
+load_prices()
+load_emails()
+
+check_and_save_new_emails()
 
 # Avvio interfaccia
 root.after(150, update_tree_view_columns_width)

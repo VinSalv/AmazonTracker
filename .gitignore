@@ -4,5 +4,6 @@
 /dist
 /logs
 /my_venv
+/emails.json
 /prices.json
 /products.json
