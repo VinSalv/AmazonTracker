@@ -5,6 +5,8 @@ import webbrowser
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
+from PIL import Image
+from io import BytesIO
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl
@@ -235,6 +237,17 @@ def check_and_save_new_emails():
     save_emails()
 
 
+def open_images_folder():
+    """
+    Funzione per aprire la cartella immagini
+    """
+    if os.path.exists(images_dir):
+        os.startfile(images_dir)  # Su Windows
+    else:
+        logger.error("La cartella delle immagini non esiste")
+        tk.messagebox.showerror("Errore", "La cartella delle immagini non esiste!")
+
+
 def clean_products_and_prices_history():
     """
     Rimuove dalla cronologia di monitoraggio dei prezzi tutti i prodotti che non sono più osservati
@@ -313,11 +326,11 @@ def open_about_dialog():
     name_label.pack(pady=10)
 
     # Label con il numero di versione/release
-    release_label = tk.Label(about_dialog, text="Versione: 3.2.0", font=("Arial", 12))
+    release_label = tk.Label(about_dialog, text="Versione: 3.3.0", font=("Arial", 12))
     release_label.pack(pady=5)
 
     # Label con un eventuale numero di release successiva
-    release_note_label = tk.Label(about_dialog, text="Ultima release: 3 ottobre 2024", font=("Arial", 10))
+    release_note_label = tk.Label(about_dialog, text="Ultima release: 7 ottobre 2024", font=("Arial", 10))
     release_note_label.pack(pady=5)
 
     # Pulsante per chiudere la finestra modale
@@ -579,6 +592,53 @@ def get_price(url):
     except Exception as e:
         logger.error(f"Errore in get_price: {e}")
         return None
+
+
+def get_image(name):
+    """
+    Estrae il prezzo e la prima immagine di un prodotto da una pagina Amazon
+    """
+    # Definizione dell'header per emulare un browser
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept-Language": "it-IT,it;q=0.9",
+    }
+
+    try:
+        # Esecuzione richiesta HTTP
+        response = requests.get(products[name]['url'], headers=headers)
+        response.raise_for_status()
+
+        # Parsing del contenuto HTML della risposta
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        # Trova la prima immagine del prodotto
+        image_element = soup.find("img", id="landingImage")
+        if image_element is None:
+            raise ValueError(f"Immagine di {name} non trovata")
+        image_url = image_element['src']
+
+        # Scarica l'immagine
+        image_response = requests.get(image_url)
+        image_response.raise_for_status()
+
+        # Crea la directory se non esiste
+        if not os.path.exists(images_dir):
+            os.makedirs(images_dir)
+
+        # Salva l'immagine
+        image = Image.open(BytesIO(image_response.content))
+        image_path = os.path.join(images_dir, f"{name.replace(' ', '_')}.jpg")  # Limita la lunghezza del nome del file
+        image.save(image_path)
+
+        return image_path
+
+    except requests.RequestException as e:
+        logger.error(f"Errore nella richiesta HTTP di get_image per il prodotto {name}: {e}")
+        return products[name]['image'] if products[name]['image'] else None
+    except Exception as e:
+        logger.error(f"Errore in get_image per il prodotto {name}: {e}")
+        return products[name]['image'] if products[name]['image']else None
 
 
 def start_tracking(name, url):
@@ -1145,6 +1205,7 @@ def open_add_product_dialog():
             "date_added": now,
             "date_edited": now,
             "emails_and_thresholds": emails_and_thresholds,
+            "image": get_image(name)
         }
 
         save_products()
@@ -1476,6 +1537,7 @@ def open_edit_product_dialog():
         products[name]["timer_refresh"] = timer_refresh
         products[name]["date_edited"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         products[name]["emails_and_thresholds"] = emails_and_thresholds
+        products[name]["image"] = get_image(name)
 
         save_products()
         save_price(name, products[name]["price"])
@@ -1613,13 +1675,12 @@ def remove_products():
         unlock_root()
 
 
-def open_progress_dialog(update_all=True):
+def open_progress_dialog(update_all_prices=None, update_all_images=None):
     """
-    Apre una finestra di dialogo per la barra di caricamento durante l'aggiornamento dei prezzi dei prodotti
-    Il processo di aggiornamento può essere applicato a tutti i prodotti o solo a quelli selezionati, a seconda
-    del parametro `update_all`
+    Apre una finestra di dialogo per la barra di caricamento durante l'aggiornamento dei prezzi
+    oppure delle immagini dei prodotti
     """
-    def update_prices_threaded(loading_dialog, update_all=True):
+    def update_prices_threaded(loading_dialog, update_all_prices=True):
         """
         Funzione del thread separato per gestire l'aggiornamento dei prezzi
         """
@@ -1641,7 +1702,7 @@ def open_progress_dialog(update_all=True):
                 
                 # Aggiornamento della barra di progresso
                 loading_dialog.progress_bar["value"] = product_index + 1
-                loading_dialog.progress_label.config(text=f"Aggiornamento di {product_index + 1}/{max_value}...")
+                loading_dialog.progress_label.config(text=f"Aggiornamento prezzo di {product_index + 1}/{max_value}...")
                 loading_dialog.update_idletasks()
 
                 # Gestione del caso in cui il prezzo non può essere aggiornato passando al prossimo prodotto da aggiornare
@@ -1704,7 +1765,7 @@ def open_progress_dialog(update_all=True):
         block_root()
         
         # Aggiornamento dei prezzi di tutti i prodotti o solo di quelli selezionati
-        if update_all:
+        if update_all_prices:
             update_prices(loading_dialog, products)
         else:
             selected_products = products_tree.selection()
@@ -1721,6 +1782,40 @@ def open_progress_dialog(update_all=True):
         root.focus_force()  # Forza il focus sulla finestra principale
         loading_dialog.destroy()
 
+    def update_new_images_threaded(loading_dialog, update_all_images=True):
+        def check_and_save_new_images(loading_dialog, products_to_update):
+            max_value = len(products_to_update)
+            loading_dialog.progress_bar["maximum"] = max_value
+            loading_dialog.progress_bar["value"] = 0
+            
+            for product_index, name in enumerate(products_to_update):
+                products[name]['image'] = get_image(name)
+
+                # Aggiornamento della barra di progresso
+                loading_dialog.progress_bar["value"] = product_index + 1
+                loading_dialog.progress_label.config(text=f"Aggiornamento immagine di {product_index + 1}/{max_value}...")
+                loading_dialog.update_idletasks()
+            
+            save_products()
+        # Blocco della Root durante l'aggiornamento dei prezzi
+        block_root()
+        
+        # Aggiornamento delle immagini dei prodotti
+        if update_all_images:
+            check_and_save_new_images(loading_dialog, products)
+        else:
+            selected_products = products_tree.selection()
+
+            if not selected_products:
+                logger.warning("Nessun prodotto selezionato per aggiornare il prezzo")
+                return
+            
+            check_and_save_new_images(loading_dialog, selected_products)
+
+        # Sblocco della Root al termine dell'aggiornamento dei prezzi
+        unlock_root()
+
+        loading_dialog.destroy()
 
     # Dialog per informazioni sul caricamento
     loading_dialog = tk.Toplevel(root)
@@ -1740,8 +1835,12 @@ def open_progress_dialog(update_all=True):
     center_window(loading_dialog)
 
     # Esecuzione dell'aggiornamento dei prezzi in un thread separato (necessario per la corretta visualizzazione del dialog)
-    thread = threading.Thread(target=update_prices_threaded, args=(loading_dialog, update_all))
-    thread.start()
+    if update_all_prices is not None:
+        thread = threading.Thread(target=update_prices_threaded, args=(loading_dialog, update_all_prices))
+        thread.start()
+    elif update_all_images is not None:
+        thread = threading.Thread(target=update_new_images_threaded, args=(loading_dialog, update_all_images))
+        thread.start()
 
     loading_dialog.wait_window()
 
@@ -1930,7 +2029,8 @@ def update_tree_view_columns_width(event=None):
 def click(event):
     """
     Selezione prodotto con il tasto sinistro del mouse e multiselezione con ctrl + tasto sinistro del mouse
-    Deseleziona tutti i prodotti se si seleziona qualcosa di diverso da un prodotto nella TreeView
+    Deseleziona tutti i prodotti se si seleziona qualcosa di diverso dallo stesso nella TreeView
+    oppure rimuovi il focus dalle entry se si seleziona qualcosa di diverso dalla stessa
     """
     global current_index, click_index
 
@@ -1940,8 +2040,8 @@ def click(event):
     # Identifica il prodotto cliccato (basato sulla posizione y del click)
     identified_product_index = products_tree.identify_row(event.y)
 
-    # Seleziona o deseleziona un prodotto in base a se è stato cliccato o meno
-    if identified_product_index in products_in_tree_view:
+    # Gestione selezione di un prodotto oppure del focus sulle entry
+    if isinstance(event.widget, ttk.Treeview) and identified_product_index in products_in_tree_view: # Non rimuovere isinstance, altrimenti clicca prodotti anche al di fuori del tree
         # Variabile globale utile per le condizioni della funzione arrow_navigation_and_shift_arrow
         click_index = products_in_tree_view.index(identified_product_index)
 
@@ -1958,11 +2058,20 @@ def click(event):
             products_tree.selection_remove(*selected_products)
             products_tree.selection_add(products_in_tree_view[current_index])
     else:
-        if not isinstance(event.widget, ttk.Button):
-            products_tree.selection_remove(*selected_products)
+        products_tree.selection_remove(*selected_products)
 
-            current_index = None
+        current_index = None
 
+        if not isinstance(event.widget, tk.Entry) or event.widget is None:
+            if search_entry.get() == "":
+                search_entry.insert(0, placeholder_text)
+                search_entry.config(fg='grey')
+            root.focus_set()
+        else:
+            if search_entry.get() == placeholder_text:
+                search_entry.delete(0, tk.END)
+                search_entry.config(fg='black')
+        
 
 def double_click(event):
     """
@@ -2013,6 +2122,7 @@ def arrow_navigation_and_shift_arrow(event):
     Navigazione tra i prodotti con le frecce su/giu e multiselezione con shift + freccie su/giu
     """
     global current_index, click_index
+    print(current_index)
 
     products_in_tree_view = products_tree.get_children()
 
@@ -2044,6 +2154,7 @@ def arrow_navigation_and_shift_arrow(event):
 
     click_index = None
     
+    print(current_index)
     # Gestisce la navigazione con i tasti freccia
     if event.keysym == "Down":
         # Partenza dal primo prodotto se nessun prodotto è stato selezionato
@@ -2154,6 +2265,32 @@ def on_hover_products_tree(event):
         hovered_row_products_tree = None
 
 
+def update_buttons_state():
+    """
+    Aggiornamento dello stato dei pulsanti in base al numero di prodotti selezionati
+    """
+    num_selected_products = len(products_tree.selection())
+
+    if num_selected_products == 1:
+        file_menu.entryconfig("Visualizza", state="normal")
+        edit_menu.entryconfig("Modifica prodotto", state="normal")
+        edit_menu.entryconfig("Rimuovi prodotto", state="normal")
+        products_menu.entryconfig("Aggiorna selezionati", state="normal")
+        images_menu.entryconfig("Aggiorna selezionate", state="normal")
+    elif num_selected_products > 1:
+        file_menu.entryconfig("Visualizza", state="normal")
+        edit_menu.entryconfig("Modifica prodotto", state="normal")
+        edit_menu.entryconfig("Rimuovi prodotto", state="normal")
+        products_menu.entryconfig("Aggiorna selezionati", state="normal")
+        images_menu.entryconfig("Aggiorna selezionate", state="normal")
+    else:
+        file_menu.entryconfig("Visualizza", state="disabled")
+        edit_menu.entryconfig("Modifica prodotto", state="disabled")
+        edit_menu.entryconfig("Rimuovi prodotto", state="disabled")
+        products_menu.entryconfig("Aggiorna selezionati", state="disabled")
+        images_menu.entryconfig("Aggiorna selezionate", state="disabled")
+
+
 def periodic_refresh_root():
     """
     Aggiornamento periodico della Root
@@ -2209,33 +2346,8 @@ def periodic_refresh_root():
         if hovered_row_products_tree in products_in_tree_view:
             products_tree.item(hovered_row_products_tree, tags=("hover",))
 
-    def update_buttons_state():
-        """
-        Aggiornamento dello stato dei pulsanti in base al numero di prodotti selezionati
-        """
-        num_selected_products = len(products_tree.selection())
-
-        if num_selected_products == 1:
-            view_button["state"] = "normal"
-            edit_button["state"] = "normal"
-            remove_button["state"] = "normal"
-            update_button["state"] = "normal"
-        elif num_selected_products > 1:
-            view_button["state"] = "disabled"
-            edit_button["state"] = "disabled"
-            remove_button["state"] = "normal"
-            update_button["state"] = "normal"
-        else:
-            view_button["state"] = "disabled"
-            edit_button["state"] = "disabled"
-            remove_button["state"] = "disabled"
-            update_button["state"] = "disabled"
-            update_all_button["state"] = "normal" if products_to_view else "disabled"
-
     if is_possible_to_refresh_root:
         refresh_tree_view()
-
-        update_buttons_state()
 
         # Chiama ricorsivamente la funzione dopo 500 millisecondi per creare un aggiornamento periodico della Root
         root.after(500, periodic_refresh_root)
@@ -2291,6 +2403,8 @@ prices_graph_application = None
 emails_file = "emails.json"
 emails = []
 
+images_dir = os.path.join(os.getcwd(), "images")
+
 threads = {}
 stop_events = {}
 
@@ -2322,13 +2436,33 @@ menu_bar = tk.Menu(root)
 # Menu "File"
 file_menu = tk.Menu(menu_bar, tearoff=0)
 file_menu.add_command(label="Nuovo", command=open_add_product_dialog)
+file_menu.add_command(label="Visualizza", command=show_product_details, state="disabled")
 file_menu.add_separator()
 file_menu.add_command(label="Esci", command=root.quit)
 
+# Menu "Modifica"
+edit_menu = tk.Menu(menu_bar, tearoff=0)
+edit_menu.add_command(label="Modifica prodotto", command=open_edit_product_dialog, state="disabled")
+edit_menu.add_command(label="Rimuovi prodotto", command=remove_products, state="disabled")
+
+# Menu "Aggiorna"
+update_menu = tk.Menu(menu_bar, tearoff=0)
+
+images_menu = tk.Menu(update_menu, tearoff=0)
+images_menu.add_command(label="Aggiorna immagini", command=lambda: open_progress_dialog(update_all_images=True))
+images_menu.add_command(label="Aggiorna selezionate", command=lambda: open_progress_dialog(update_all_images=False), state="disabled")
+images_menu.add_command(label="Vai alla cartella immagini", command=open_images_folder)
+update_menu.add_cascade(label="Immagini", menu=images_menu)
+
+products_menu = tk.Menu(update_menu, tearoff=0)
+products_menu.add_command(label="Aggiorna prodotti", command=lambda: open_progress_dialog(update_all_prices=True))
+products_menu.add_command(label="Aggiorna selezionati", command=lambda: open_progress_dialog(update_all_prices=False), state="disabled")
+update_menu.add_cascade(label="Prodotti", menu=products_menu)
+
 # Menu "Impostazioni"
 history_menu = tk.Menu(menu_bar, tearoff=0)
-history_menu.add_command(label="Pulisci cronologia prodotti non osservati", command=clean_products_and_prices_history)
-history_menu.add_command(label="Pulisci cronologia email non utilizzate", command=clean_emails_history)
+history_menu.add_command(label="Pulisci cronologia prodotti", command=clean_products_and_prices_history)
+history_menu.add_command(label="Pulisci cronologia email", command=clean_emails_history)
 
 # Menu "Aiuto"
 help_menu = tk.Menu(menu_bar, tearoff=0)
@@ -2336,44 +2470,23 @@ help_menu.add_command(label="Info", command=open_about_dialog)
 
 # Aggiungi il menu "Modifica" alla barra di menu
 menu_bar.add_cascade(label="File", menu=file_menu)
+menu_bar.add_cascade(label="Modifica", menu=edit_menu)
+menu_bar.add_cascade(label="Aggiorna", menu=update_menu)
 menu_bar.add_cascade(label="Impostazioni", menu=history_menu)
 menu_bar.add_cascade(label="Aiuto", menu=help_menu)
 
 # Configura la barra di menu nell'interfaccia principale
 root.config(menu=menu_bar)
 
-# Pulsanti
-button_frame = ttk.Frame(root)
-button_frame.pack(fill="x", padx=10, pady=(15, 0))
-
-add_button = ttk.Button(button_frame, text="Aggiungi", command=open_add_product_dialog)
-add_button.grid(row=2, column=0, padx=5, pady=5, sticky="we")
-
-view_button = ttk.Button(button_frame, text="Visualizza", command=show_product_details, state="disabled")
-view_button.grid(row=2, column=1, padx=5, pady=5, sticky="we")
-
-edit_button = ttk.Button(button_frame, text="Modifica", command=open_edit_product_dialog, state="disabled")
-edit_button.grid(row=2, column=2, padx=5, pady=5, sticky="we")
-
-remove_button = ttk.Button(button_frame, text="Rimuovi", command=remove_products, state="disabled")
-remove_button.grid(row=2, column=3, padx=5, pady=5, sticky="we")
-
-ttk.Label(button_frame, text="", width=18).grid(row=2, column=4, padx=5, pady=5, sticky="we") # Spazio
-
-update_button = ttk.Button(button_frame, text="Aggiorna Selezionati", command=lambda: open_progress_dialog(False), state="disabled")
-update_button.grid(row=2, column=5, padx=5, pady=5, sticky="e")
-
-update_all_button = ttk.Button(button_frame, text="Aggiorna Tutti", command=lambda: open_progress_dialog(), state="disabled")
-update_all_button.grid(row=2, column=6, padx=5, pady=5, sticky="e")
-
 # Barra di ricerca
-search_frame = ttk.Frame(root)
-search_frame.pack(fill="x", padx=5, pady=0)
+placeholder_text = "Cerca un prodotto..."
 
-ttk.Label(search_frame, text="Ricerca Prodotto:", font=("Arial", 10)).grid(row=0, column=0, padx=10, pady=10, sticky="we")
+search_entry = tk.Entry(root, width=75, font=("Arial", 12), validate="key", validatecommand=limit_letters)
+search_entry.pack(padx=40, pady=20, anchor= "e" )  # Allinea l'Entry a destra
 
-search_entry = ttk.Entry(search_frame, width=79, font=("Arial", 10), validate="key", validatecommand=limit_letters)
-search_entry.grid(row=0, column=1, padx=10, pady=10, sticky="we")
+# Imposta il placeholder
+search_entry.insert(0, placeholder_text)
+search_entry.config(fg='grey')  # Colore del testo del placeholder
 
 # Configura lo stile della Treeview
 style = ttk.Style()
@@ -2416,27 +2529,28 @@ single_selection_menu = tk.Menu(root, tearoff=0)
 single_selection_menu.add_command(label="Visualizza prodotto", command=show_product_details)
 single_selection_menu.add_command(label="Modifica prodotto", command=open_edit_product_dialog)
 single_selection_menu.add_command(label="Rimuovi prodotto", command=remove_products)
+single_selection_menu.add_command(label="Aggiorna selezionato", command=lambda: open_progress_dialog(update_all_prices=False))
 
 multi_selection_menu = tk.Menu(root, tearoff=0)
 multi_selection_menu.add_command(label="Rimuovi selezionati", command=remove_products)
-multi_selection_menu.add_command(label="Aggiorna selezionati", command=lambda: open_progress_dialog(False))
+multi_selection_menu.add_command(label="Aggiorna selezionati", command=lambda: open_progress_dialog(update_all_prices=False))
 
 # Definizione eventi root e product_tree
 root.bind("<Control-a>", select_all_products)
 root.bind("<Configure>", update_tree_view_columns_width)
 root.bind("<Button-1>", click)
+root.bind("<Shift-Button-1>", shift_click)
+root.bind("<Down>", arrow_navigation_and_shift_arrow)
+root.bind("<Up>", arrow_navigation_and_shift_arrow)
 
 search_entry.bind("<KeyRelease>", lambda e: update_products_to_view())
 search_entry.bind("<Button-3>", lambda e: show_text_menu(e, search_entry))
 
 products_tree.bind("<Double-1>", double_click)
 products_tree.bind("<Return>", show_product_details)
-products_tree.bind("<Shift-Button-1>", shift_click)
-products_tree.bind("<Down>", arrow_navigation_and_shift_arrow)
-products_tree.bind("<Up>", arrow_navigation_and_shift_arrow)
 products_tree.bind("<Button-3>", show_tree_view_menu)
-
 products_tree.bind("<Motion>", on_hover_products_tree)
+products_tree.bind("<<TreeviewSelect>>", lambda event: update_buttons_state())
 
 # Carica i dati
 load_products()

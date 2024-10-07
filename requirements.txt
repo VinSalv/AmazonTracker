@@ -1,7 +1,7 @@
-pandas
-plotly
-PyQt5
-PyQtWebEngine
 requests
 beautifulsoup4
+Pillow
+pandas
+plotly
 pyperclip
+PyQt5

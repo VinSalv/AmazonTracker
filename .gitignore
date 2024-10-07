@@ -2,6 +2,7 @@
 /build
 /config.json
 /dist
+/images
 /logs
 /my_venv
 /emails.json
