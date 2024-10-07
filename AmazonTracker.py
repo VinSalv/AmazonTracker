@@ -326,7 +326,7 @@ def open_about_dialog():
     name_label.pack(pady=10)
 
     # Label con il numero di versione/release
-    release_label = tk.Label(about_dialog, text="Versione: 3.3.0", font=("Arial", 12))
+    release_label = tk.Label(about_dialog, text="Versione: 3.3.1", font=("Arial", 12))
     release_label.pack(pady=5)
 
     # Label con un eventuale numero di release successiva
@@ -2122,7 +2122,6 @@ def arrow_navigation_and_shift_arrow(event):
     Navigazione tra i prodotti con le frecce su/giu e multiselezione con shift + freccie su/giu
     """
     global current_index, click_index
-    print(current_index)
 
     products_in_tree_view = products_tree.get_children()
 
@@ -2154,7 +2153,6 @@ def arrow_navigation_and_shift_arrow(event):
 
     click_index = None
     
-    print(current_index)
     # Gestisce la navigazione con i tasti freccia
     if event.keysym == "Down":
         # Partenza dal primo prodotto se nessun prodotto è stato selezionato
@@ -2165,7 +2163,7 @@ def arrow_navigation_and_shift_arrow(event):
             return
 
         # Limita la selezione all'ultimo prodotto
-        if current_index == len(products_in_tree_view) - 1 and products_in_tree_view[current_index] not in selected_products:
+        if current_index == len(products_in_tree_view) - 1 or products_in_tree_view[current_index] not in selected_products:
             products_tree.selection_add(products_in_tree_view[current_index])
             return
 
@@ -2180,7 +2178,7 @@ def arrow_navigation_and_shift_arrow(event):
             return
         
         # Limita la selezione al primo prodotto
-        if current_index == 0 and products_in_tree_view[current_index] not in selected_products:
+        if current_index == 0 or products_in_tree_view[current_index] not in selected_products:
             products_tree.selection_add(products_in_tree_view[current_index])
             return
         
