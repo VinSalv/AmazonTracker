@@ -5,7 +5,7 @@ import webbrowser
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
-from PIL import Image
+from PIL import Image, ImageTk
 from io import BytesIO
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 import datetime
 import time
 import threading
@@ -326,11 +327,11 @@ def open_about_dialog():
     name_label.pack(pady=10)
 
     # Label con il numero di versione/release
-    release_label = tk.Label(about_dialog, text="Versione: 3.3.3", font=("Arial", 12))
+    release_label = tk.Label(about_dialog, text="Versione: 3.4.0", font=("Arial", 12))
     release_label.pack(pady=5)
 
     # Label con un eventuale numero di release successiva
-    release_note_label = tk.Label(about_dialog, text="Ultima release: 12 ottobre 2024", font=("Arial", 10))
+    release_note_label = tk.Label(about_dialog, text="Ultima release: 13 ottobre 2024", font=("Arial", 10))
     release_note_label.pack(pady=5)
 
     # Pulsante per chiudere la finestra modale
@@ -436,7 +437,7 @@ def send_notification_and_email(name, previous_price, current_price):
             messagebox.showerror("Attenzione", f"File di configurazione '{config_file}' non trovato")
             exit()
     
-    def send_email(subject, body, email_to_notify):
+    def send_email(subject, body, image_path, email_to_notify):
         """
         Invia un'email con l'oggetto e il corpo al destinatario
         """
@@ -448,7 +449,16 @@ def send_notification_and_email(name, previous_price, current_price):
         msg["From"] = from_email
         msg["To"] = email_to_notify
         msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain"))
+        
+        # Aggiungi il corpo del messaggio
+        msg.attach(MIMEText(body, 'html'))
+
+        # Aggiungi l'immagine se presente
+        if image_path and os.path.isfile(image_path):
+            with open(image_path, 'rb') as img:
+                image = MIMEImage(img.read())
+                image.add_header('Content-ID', '<image1>')
+                msg.attach(image)
 
         try:
             server = smtplib.SMTP("smtp.gmail.com", 587) # Imposta connessione al server SMTP
@@ -459,7 +469,7 @@ def send_notification_and_email(name, previous_price, current_price):
         except Exception as e:
             logger.error(f"Impossibile inviare l'email: {e}")
 
-    def send_default_notification(subject, body):
+    def send_default_notification(subject, body, body_email, image_path):
         """
         Invia una email e una notifica Telegram al desinatario di default
         """
@@ -467,7 +477,7 @@ def send_notification_and_email(name, previous_price, current_price):
         _, _, default_recipient_email, default_url_telegram, default_chat_id_telegram = load_config()
 
         # Invia email
-        send_email(subject, body, default_recipient_email)
+        send_email(subject, body_email, image_path, default_recipient_email)
 
         try:
             # Prepara payload per Telegram
@@ -492,42 +502,63 @@ def send_notification_and_email(name, previous_price, current_price):
     # Prepara l'oggetto e il corpo della notifica
     subject = "Prezzo in calo!"
     if average_price == price_minimum == price_maximum:
-         body = (
+        body = (
             f"Il prezzo dell'articolo '{name}' è sceso da {previous_price}€ a {current_price}€.\n\n"
             + "Dettagli:\n\t- Primo ribasso del prezzo rilevato\n\nNon ho abbastanza dati nello storico del prodotto per fornire un suggerimento sulla validità dell'acquisto\n\n"
             + f"Acquista ora: {products[name]['url']}"
-            )
+        )
+        body_email = (
+                f"Il prezzo dell'articolo '{name}' è sceso da {previous_price}€ a {current_price}€.<br><br>"
+                + "Dettagli:<br>\t- Primo ribasso del prezzo rilevato<br><br>"
+                + "Non ho abbastanza dati nello storico del prodotto per fornire un suggerimento sulla validità dell'acquisto.<br><br>"
+                + f"Acquista ora: <a href='{products[name]['url']}'>clicca qui</a><br><br>"
+        )
     else:
         body = (
             f"Il prezzo dell'articolo '{name}' è sceso da {previous_price}€ a {current_price}€.\n\n"
             + f"Dettagli:\n\t- Prezzo medio: {average_price}€\n\t- Prezzo minimo storico: {price_minimum}€\n\t- Prezzo massimo storico: {price_maximum}€\n\n{text_suggestion}\n\n"
             + f"Acquista ora: {products[name]['url']}"
             )
+        body_email = (
+                f"Il prezzo dell'articolo '{name}' è sceso da {previous_price}€ a {current_price}€.<br><br>"
+                + f"Dettagli:<br>\t- Prezzo medio: {average_price}€<br>\t- Prezzo minimo storico: {price_minimum}€<br>\t- Prezzo massimo storico: {price_maximum}€<br><br>"
+                + f"{text_suggestion}<br><br>"
+                + f"Acquista ora: <a href='{products[name]['url']}'>clicca qui</a><br><br>"
+        )
     
+    image_path = products[name].get('image')
+
+    if image_path and os.path.isfile(image_path):
+        body_email += f"<img src='cid:image1'>"
+
     # Invio notifica telegram
-    if current_price < previous_price:
-        send_default_notification(subject=subject, body=body)
+    if current_price-1 < previous_price:
+        send_default_notification(subject, body, body_email, image_path)
 
     # Controllo delle soglie e invio delle e-mail
     for email, threshold in products[name]["emails_and_thresholds"].items():
         value_to_compare = previous_price
         subject_to_send = subject
-        body_to_send = body
+        body_to_send = body_email
 
         # Tenere conto della soglia nel caso in cui fosse settata
         if threshold != 0.0:
             value_to_compare = threshold
             subject_to_send = "Prezzo inferiore alla soglia indicata!"
             body_to_send = (
-                f"Il prezzo dell'articolo '{name}' è al di sotto della soglia di {value_to_compare}€ indicata.\n"
-                + f"Il costo attuale è {current_price}€.\n\n"
-                + f"Dettagli:\n\t- Prezzo medio: {average_price}€\n\t- Prezzo minimo storico: {price_minimum}€\n\t- Prezzo massimo storico: {price_maximum}€\n\n{text_suggestion}\n\n"
-                + f"Acquista ora: {products[name]['url']}"
+                        f"Il prezzo dell'articolo '{name}' è al di sotto della soglia di {value_to_compare}€ indicata.<br>"
+                        + f"Il costo attuale è {current_price}€.<br><br>"
+                        + f"Dettagli:<br>\t- Prezzo medio: {average_price}€<br>\t- Prezzo minimo storico: {price_minimum}€<br>\t- Prezzo massimo storico: {price_maximum}€<br><br>"
+                        + f"{text_suggestion}<br><br>"
+                        + f"Acquista ora: <a href='{products[name]['url']}'>clicca qui</a><br><br>"
             )
 
+            if image_path and os.path.isfile(image_path):
+                body_to_send += f"<img src='cid:image1'>"
+
         # Invio e-mail in caso di diminuizione del prezzo o diminuizione oltre la soglia
-        if current_price < value_to_compare:
-            send_email(subject=subject_to_send, body=body_to_send, email_to_notify=email)
+        if current_price-1 < value_to_compare:
+            send_email(subject_to_send, body_to_send, image_path, email)
 
 
 def get_last_price(name):
@@ -1446,13 +1477,12 @@ def show_product_details(event=None):
     details_dialog.transient(root)
     details_dialog.grab_set()
 
-    # Visualizzazione dei dettagli del prodotto
+    # Top frame per nome del prodotto, pulsanti e URL
     top_frame = ttk.Frame(details_dialog)
     top_frame.pack(fill="x", pady=10)
-    
+
     top_frame.grid_columnconfigure(0, weight=1)
     top_frame.grid_columnconfigure(1, weight=1)
-    top_frame.grid_columnconfigure(2, weight=0)
 
     ttk.Label(top_frame, text=name, font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w")
 
@@ -1463,22 +1493,70 @@ def show_product_details(event=None):
 
     ttk.Button(top_frame, text="Copia URL", command=lambda: copy_to_clipboard(url)).grid(row=1, column=1, sticky="e")
 
-    # Visualizzazione dei prezzi storici e delle statistiche
-    prices_frame = ttk.Frame(details_dialog)
-    prices_frame.pack(anchor="w", padx=10)
+    # Creazione di un frame orizzontale per i prezzi e l'immagine
+    content_frame = ttk.Frame(details_dialog)
+    content_frame.pack(fill="both", expand=True, pady=10)
 
-    ttk.Label(prices_frame, text=f"Prezzo Attuale: {current_price:.2f}€" if isinstance(current_price, (int, float)) else "Prezzo Attuale: -", font=("Arial", 14, "bold"), foreground=color_suggestion).grid(row=0, column=0, sticky="w", pady=(5, 10))
-    
-    ttk.Label(prices_frame, text="Prezzo Medio:", font=("Arial", 10)).grid(row=1, column=0, sticky="w", pady=5)
-    ttk.Label(prices_frame, text=f"{average_price:.2f}€" if isinstance(average_price, (int, float)) else "-", font=("Arial", 10)).grid(row=1, column=1, sticky="e", pady=5)
+    # Definire proporzioni per le colonne
+    content_frame.grid_columnconfigure(0, weight=3, uniform="content")
+    content_frame.grid_columnconfigure(1, weight=2, uniform="content")
 
-    ttk.Label(prices_frame, text="Prezzo Minimo Storico:", font=("Arial", 10)).grid(row=2, column=0, sticky="w", pady=5)
-    ttk.Label(prices_frame, text=f"{price_minimum:.2f}€" if isinstance(price_minimum, (int, float)) else "-", font=("Arial", 10)).grid(row=2, column=1, sticky="e", pady=5)
+    # Parte sinistra: prezzi storici e statistiche
+    prices_frame = ttk.Frame(content_frame)
+    prices_frame.grid(row=0, column=0, sticky="nsew", padx=10)
 
-    ttk.Label(prices_frame, text="Prezzo Massimo Storico:", font=("Arial", 10)).grid(row=3, column=0, sticky="w", pady=5)
-    ttk.Label(prices_frame, text=f"{price_maximum:.2f}€" if isinstance(price_maximum, (int, float)) else "-", font=("Arial", 10)).grid(row=3, column=1, sticky="e", pady=5)
-    
-    # Visualizzazione del cosniglio sull'acquisto
+    # Frame interno per centrare i prezzi
+    centered_prices_frame = ttk.Frame(prices_frame)
+    centered_prices_frame.pack(fill="both", expand=True)
+
+    ttk.Label(centered_prices_frame, text=f"Prezzo Attuale: {current_price:.2f}€" if isinstance(current_price, (int, float)) else "Prezzo Attuale: -", font=("Arial", 14, "bold"), foreground=color_suggestion).grid(row=0, column=0, sticky="w", pady=(5, 10))
+
+    ttk.Label(centered_prices_frame, text="Prezzo Medio:", font=("Arial", 10)).grid(row=1, column=0, sticky="w", pady=5)
+    ttk.Label(centered_prices_frame, text=f"{average_price:.2f}€" if isinstance(average_price, (int, float)) else "-", font=("Arial", 10)).grid(row=1, column=1, sticky="e", pady=5)
+
+    ttk.Label(centered_prices_frame, text="Prezzo Minimo Storico:", font=("Arial", 10)).grid(row=2, column=0, sticky="w", pady=5)
+    ttk.Label(centered_prices_frame, text=f"{price_minimum:.2f}€" if isinstance(price_minimum, (int, float)) else "-", font=("Arial", 10)).grid(row=2, column=1, sticky="e", pady=5)
+
+    ttk.Label(centered_prices_frame, text="Prezzo Massimo Storico:", font=("Arial", 10)).grid(row=3, column=0, sticky="w", pady=5)
+    ttk.Label(centered_prices_frame, text=f"{price_maximum:.2f}€" if isinstance(price_maximum, (int, float)) else "-", font=("Arial", 10)).grid(row=3, column=1, sticky="e", pady=5)
+
+    # Parte destra: immagine del prodotto
+    image_frame = ttk.Frame(content_frame)
+    image_frame.grid(row=0, column=1, sticky="nsew", padx=10)
+
+    # Carica e ridimensiona l'immagine del prodotto
+    image_path = products[name]['image']
+    if image_path:
+        try:
+            # Apri l'immagine
+            original_image = Image.open(image_path)
+            print(f"Immagine caricata correttamente: {image_path}")
+
+            # Dimensione desiderata
+            target_size = (150, 150)
+
+            # Ridimensiona forzatamente l'immagine
+            resized_image = original_image.resize(target_size, Image.LANCZOS)
+
+            # Converti l'immagine per Tkinter
+            tk_image = ImageTk.PhotoImage(resized_image)
+
+            # Aggiungi l'immagine a un Label nel frame immagine
+            image_label = ttk.Label(image_frame, image=tk_image)
+            image_label.pack(anchor="center")
+
+            # Mantieni il riferimento all'immagine per evitare che venga garbage collected
+            image_label.image = tk_image
+
+        except Exception as e:
+            logger.error(f"Errore nel caricamento dell'immagine: {e}")
+    else:
+        logger.warning(f"Nessuna immagine trovata per {name}")
+
+        no_image_label = ttk.Label(image_frame, text="Aggiorna l'immagine", font=("Arial", 10, "bold"), foreground="red", background="lightgray", anchor="center")
+        no_image_label.pack(fill="both", expand=True)
+
+    # Visualizzazione del consiglio sull'acquisto
     ttk.Label(details_dialog, text=text_suggestion, font=("Arial", 12, "bold"), foreground=color_suggestion).pack(pady=10)
 
     # Pulsante chiusura finestra
@@ -1487,6 +1565,7 @@ def show_product_details(event=None):
     # Definizione eventi widget
     url_label.bind("<Button-1>", open_url)
 
+    # Centra la finestra di dialogo
     center_window(details_dialog)
 
 
@@ -1860,22 +1939,23 @@ def open_progress_dialog(update_all_prices=None, update_all_images=None):
     loading_dialog.wait_window()
 
 
-def update_products_to_view():
+def update_products_to_view(*args):
     """
     Aggiorna la lista dei prodotti da visualizzare in base al testo inserito nella barra di ricerca
     """
     global products_to_view
 
-    # Resetta i filtri mantenendo lo stato corrente della barra di ricerca
-    reset_filters(reset_search_bar=False)
+    if search_entry.get() != placeholder_text:
+        # Resetta i filtri mantenendo lo stato corrente della barra di ricerca
+        reset_filters(reset_search_bar=False)
 
-    search_text = search_entry.get()
+        search_text = search_entry.get().strip()
 
-    # Filtra i prodotti, altrimenti mostra tutti i prodotti
-    if search_text != "":
-        products_to_view = {name: details for name, details in products.items() if search_text.lower() in name.lower()}
-    else:
-        products_to_view = products
+        # Filtra i prodotti, altrimenti mostra tutti i prodotti
+        if search_text != "":
+            products_to_view = {name: details for name, details in products.items() if search_text.lower() in name.lower()}
+        else:
+            products_to_view = products
 
 
 def show_text_menu(event, widget, onlyRead=False):
@@ -1890,7 +1970,7 @@ def show_text_menu(event, widget, onlyRead=False):
         try:
             if isinstance(widget, tk.Text):
                 return widget.tag_ranges(tk.SEL) != ()
-            elif isinstance(widget, ttk.Entry):
+            elif isinstance(widget, ttk.Entry) or isinstance(widget, tk.Entry):
                 return widget.selection_present()
         except tk.TclError:
             return False
@@ -1931,6 +2011,10 @@ def show_text_menu(event, widget, onlyRead=False):
             widget.event_generate("<<Paste>>")
         except tk.TclError:
             pass
+
+    if widget == search_entry and search_entry.get() == placeholder_text:
+        search_entry.delete(0, tk.END)
+        search_entry.config(fg='black')
 
     text_menu = tk.Menu(root, tearoff=0)
 
@@ -2078,7 +2162,8 @@ def click(event):
         current_index = None
 
         if not isinstance(event.widget, tk.Entry) or event.widget is None:
-            if search_entry.get() == "":
+            if search_entry.get().strip() == "":
+                search_entry.delete(0, tk.END)
                 search_entry.insert(0, placeholder_text)
                 search_entry.config(fg='grey')
             root.focus_set()
@@ -2225,21 +2310,21 @@ def on_menu_open():
     num_selected_products = len(products_tree.selection())
 
     if num_selected_products == 1:
-        file_menu.entryconfig("Visualizza", state="normal")
-        edit_menu.entryconfig("Modifica prodotto", state="normal")
-        edit_menu.entryconfig("Rimuovi prodotto", state="normal")
+        action_menu.entryconfig("Visualizza", state="normal")
+        action_menu.entryconfig("Modifica prodotto", state="normal")
+        action_menu.entryconfig("Rimuovi prodotto", state="normal")
         products_menu.entryconfig("Aggiorna selezionati", state="normal")
         images_menu.entryconfig("Aggiorna selezionate", state="normal")
     elif num_selected_products > 1:
-        file_menu.entryconfig("Visualizza", state="normal")
-        edit_menu.entryconfig("Modifica prodotto", state="normal")
-        edit_menu.entryconfig("Rimuovi prodotto", state="normal")
+        action_menu.entryconfig("Visualizza", state="normal")
+        action_menu.entryconfig("Modifica prodotto", state="normal")
+        action_menu.entryconfig("Rimuovi prodotto", state="normal")
         products_menu.entryconfig("Aggiorna selezionati", state="normal")
         images_menu.entryconfig("Aggiorna selezionate", state="normal")
     else:
-        file_menu.entryconfig("Visualizza", state="disabled")
-        edit_menu.entryconfig("Modifica prodotto", state="disabled")
-        edit_menu.entryconfig("Rimuovi prodotto", state="disabled")
+        action_menu.entryconfig("Visualizza", state="disabled")
+        action_menu.entryconfig("Modifica prodotto", state="disabled")
+        action_menu.entryconfig("Rimuovi prodotto", state="disabled")
         products_menu.entryconfig("Aggiorna selezionati", state="disabled")
         images_menu.entryconfig("Aggiorna selezionate", state="disabled")
 
@@ -2275,6 +2360,8 @@ def show_tree_view_menu(event):
         if event.widget == products_tree:
             products_tree.selection_remove(*selected_products)
 
+            no_selection_menu.post(event.x_root, event.y_root)
+
             current_index = None
 
 
@@ -2300,7 +2387,8 @@ def on_hover_products_tree(event):
 
     # Se il mouse non è sopra una riga, resetta l'hover
     elif not row_id and hovered_row_products_tree:
-        products_tree.item(hovered_row_products_tree, tags=())
+        if hovered_row_products_tree in products_to_view:
+            products_tree.item(hovered_row_products_tree, tags=())
         hovered_row_products_tree = None
 
 
@@ -2450,15 +2538,15 @@ menu_bar.configure(postcommand=on_menu_open)
 # Menu "File"
 file_menu = tk.Menu(menu_bar, tearoff=0)
 file_menu.add_command(label="Nuovo", command=open_add_product_dialog)
-file_menu.add_command(label="Visualizza", command=show_product_details, state="disabled")
 file_menu.add_separator()
 file_menu.add_command(label="Esci", command=root.quit)
 
 
 # Menu "Modifica"
-edit_menu = tk.Menu(menu_bar, tearoff=0)
-edit_menu.add_command(label="Modifica prodotto", command=open_edit_product_dialog, state="disabled")
-edit_menu.add_command(label="Rimuovi prodotto", command=remove_products, state="disabled")
+action_menu = tk.Menu(menu_bar, tearoff=0)
+action_menu.add_command(label="Visualizza", command=show_product_details, state="disabled")
+action_menu.add_command(label="Modifica prodotto", command=open_edit_product_dialog, state="disabled")
+action_menu.add_command(label="Rimuovi prodotto", command=remove_products, state="disabled")
 
 # Menu "Aggiorna"
 update_menu = tk.Menu(menu_bar, tearoff=0)
@@ -2485,7 +2573,7 @@ help_menu.add_command(label="Info", command=open_about_dialog)
 
 # Aggiungi il menu "Modifica" alla barra di menu
 menu_bar.add_cascade(label="File", menu=file_menu)
-menu_bar.add_cascade(label="Modifica", menu=edit_menu)
+menu_bar.add_cascade(label="Azioni", menu=action_menu)
 menu_bar.add_cascade(label="Aggiorna", menu=update_menu)
 menu_bar.add_cascade(label="Impostazioni", menu=history_menu)
 menu_bar.add_cascade(label="Aiuto", menu=help_menu)
@@ -2496,8 +2584,12 @@ root.config(menu=menu_bar)
 # Barra di ricerca
 placeholder_text = "Cerca un prodotto..."
 
-search_entry = tk.Entry(root, width=75, font=("Arial", 12), validate="key", validatecommand=limit_letters)
-search_entry.pack(padx=40, pady=20, anchor= "e" )  # Allinea l'Entry a destra
+# Crea una StringVar per monitorare le modifiche all'Entry
+search_entry_var = tk.StringVar()
+search_entry_var.trace_add("write", update_products_to_view)
+
+search_entry = tk.Entry(root, width=75, font=("Arial", 12), validate="key", validatecommand=limit_letters, textvariable=search_entry_var)
+search_entry.pack(padx=40, pady=20, anchor= "e")
 
 # Imposta il placeholder
 search_entry.insert(0, placeholder_text)
@@ -2550,6 +2642,9 @@ multi_selection_menu = tk.Menu(root, tearoff=0)
 multi_selection_menu.add_command(label="Rimuovi selezionati", command=remove_products)
 multi_selection_menu.add_command(label="Aggiorna selezionati", command=lambda: open_progress_dialog(update_all_prices=False))
 
+no_selection_menu = tk.Menu(root, tearoff=0)
+no_selection_menu.add_command(label="Nuovo", command=open_add_product_dialog)
+
 # Definizione eventi root e product_tree
 root.bind("<Control-a>", select_all_products)
 root.bind("<Configure>", update_tree_view_columns_width)
@@ -2558,7 +2653,6 @@ root.bind("<Shift-Button-1>", shift_click)
 root.bind("<Down>", arrow_navigation_and_shift_arrow)
 root.bind("<Up>", arrow_navigation_and_shift_arrow)
 
-search_entry.bind("<KeyRelease>", lambda e: update_products_to_view())
 search_entry.bind("<Button-3>", lambda e: show_text_menu(e, search_entry))
 
 products_tree.bind("<Double-1>", double_click)
