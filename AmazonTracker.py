@@ -532,7 +532,7 @@ def send_notification_and_email(name, previous_price, current_price):
         body_email += f"<img src='cid:image1'>"
 
     # Invio notifica telegram
-    if current_price-1 < previous_price:
+    if current_price < previous_price:
         send_default_notification(subject, body, body_email, image_path)
 
     # Controllo delle soglie e invio delle e-mail
@@ -557,7 +557,7 @@ def send_notification_and_email(name, previous_price, current_price):
                 body_to_send += f"<img src='cid:image1'>"
 
         # Invio e-mail in caso di diminuizione del prezzo o diminuizione oltre la soglia
-        if current_price-1 < value_to_compare:
+        if current_price < value_to_compare:
             send_email(subject_to_send, body_to_send, image_path, email)
 
 
