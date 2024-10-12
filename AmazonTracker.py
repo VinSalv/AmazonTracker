@@ -377,6 +377,8 @@ def reset_filters(reset_search_bar=True):
     # Reset della barra di ricerca quando richiesto
     if reset_search_bar:
         search_entry.delete(0, tk.END)
+        search_entry.insert(0, placeholder_text)
+        search_entry.config(fg='grey')
 
 
 def calculate_suggestion(all_prices, current_price, price_average, price_minimum, price_maximum):
@@ -638,7 +640,7 @@ def get_image(name):
         return products[name]['image'] if products[name]['image'] else None
     except Exception as e:
         logger.error(f"Errore in get_image per il prodotto {name}: {e}")
-        return products[name]['image'] if products[name]['image']else None
+        return products[name]['image'] if products[name]['image'] else None
 
 
 def start_tracking(name, url):
@@ -1205,8 +1207,9 @@ def open_add_product_dialog():
             "date_added": now,
             "date_edited": now,
             "emails_and_thresholds": emails_and_thresholds,
-            "image": get_image(name)
+            "image": ""
         }
+        products[name]['image'] = get_image(name)
 
         save_products()
         save_price(name, products[name]["price"])
@@ -2203,6 +2206,32 @@ def arrow_navigation_and_shift_arrow(event):
     current_index = next_index
 
 
+def on_menu_open():
+    """
+    Aggiornamento dello stato delle opzioni in base al numero di prodotti selezionati
+    """
+    num_selected_products = len(products_tree.selection())
+
+    if num_selected_products == 1:
+        file_menu.entryconfig("Visualizza", state="normal")
+        edit_menu.entryconfig("Modifica prodotto", state="normal")
+        edit_menu.entryconfig("Rimuovi prodotto", state="normal")
+        products_menu.entryconfig("Aggiorna selezionati", state="normal")
+        images_menu.entryconfig("Aggiorna selezionate", state="normal")
+    elif num_selected_products > 1:
+        file_menu.entryconfig("Visualizza", state="normal")
+        edit_menu.entryconfig("Modifica prodotto", state="normal")
+        edit_menu.entryconfig("Rimuovi prodotto", state="normal")
+        products_menu.entryconfig("Aggiorna selezionati", state="normal")
+        images_menu.entryconfig("Aggiorna selezionate", state="normal")
+    else:
+        file_menu.entryconfig("Visualizza", state="disabled")
+        edit_menu.entryconfig("Modifica prodotto", state="disabled")
+        edit_menu.entryconfig("Rimuovi prodotto", state="disabled")
+        products_menu.entryconfig("Aggiorna selezionati", state="disabled")
+        images_menu.entryconfig("Aggiorna selezionate", state="disabled")
+
+
 def show_tree_view_menu(event):
     """
     Mostra il menu contestuale dopo il click del tasto destro del mouse
@@ -2261,32 +2290,6 @@ def on_hover_products_tree(event):
     elif not row_id and hovered_row_products_tree:
         products_tree.item(hovered_row_products_tree, tags=())
         hovered_row_products_tree = None
-
-
-def update_buttons_state():
-    """
-    Aggiornamento dello stato dei pulsanti in base al numero di prodotti selezionati
-    """
-    num_selected_products = len(products_tree.selection())
-
-    if num_selected_products == 1:
-        file_menu.entryconfig("Visualizza", state="normal")
-        edit_menu.entryconfig("Modifica prodotto", state="normal")
-        edit_menu.entryconfig("Rimuovi prodotto", state="normal")
-        products_menu.entryconfig("Aggiorna selezionati", state="normal")
-        images_menu.entryconfig("Aggiorna selezionate", state="normal")
-    elif num_selected_products > 1:
-        file_menu.entryconfig("Visualizza", state="normal")
-        edit_menu.entryconfig("Modifica prodotto", state="normal")
-        edit_menu.entryconfig("Rimuovi prodotto", state="normal")
-        products_menu.entryconfig("Aggiorna selezionati", state="normal")
-        images_menu.entryconfig("Aggiorna selezionate", state="normal")
-    else:
-        file_menu.entryconfig("Visualizza", state="disabled")
-        edit_menu.entryconfig("Modifica prodotto", state="disabled")
-        edit_menu.entryconfig("Rimuovi prodotto", state="disabled")
-        products_menu.entryconfig("Aggiorna selezionati", state="disabled")
-        images_menu.entryconfig("Aggiorna selezionate", state="disabled")
 
 
 def periodic_refresh_root():
@@ -2430,6 +2433,7 @@ limit_letters = (root.register(lambda s: len(s) <= 50), "%P") # Regola per limit
 
 # Creazione della barra di menu
 menu_bar = tk.Menu(root)
+menu_bar.configure(postcommand=on_menu_open)
 
 # Menu "File"
 file_menu = tk.Menu(menu_bar, tearoff=0)
@@ -2437,6 +2441,7 @@ file_menu.add_command(label="Nuovo", command=open_add_product_dialog)
 file_menu.add_command(label="Visualizza", command=show_product_details, state="disabled")
 file_menu.add_separator()
 file_menu.add_command(label="Esci", command=root.quit)
+
 
 # Menu "Modifica"
 edit_menu = tk.Menu(menu_bar, tearoff=0)
@@ -2548,7 +2553,6 @@ products_tree.bind("<Double-1>", double_click)
 products_tree.bind("<Return>", show_product_details)
 products_tree.bind("<Button-3>", show_tree_view_menu)
 products_tree.bind("<Motion>", on_hover_products_tree)
-products_tree.bind("<<TreeviewSelect>>", lambda event: update_buttons_state())
 
 # Carica i dati
 load_products()
