@@ -326,11 +326,11 @@ def open_about_dialog():
     name_label.pack(pady=10)
 
     # Label con il numero di versione/release
-    release_label = tk.Label(about_dialog, text="Versione: 3.3.2", font=("Arial", 12))
+    release_label = tk.Label(about_dialog, text="Versione: 3.3.3", font=("Arial", 12))
     release_label.pack(pady=5)
 
     # Label con un eventuale numero di release successiva
-    release_note_label = tk.Label(about_dialog, text="Ultima release: 7 ottobre 2024", font=("Arial", 10))
+    release_note_label = tk.Label(about_dialog, text="Ultima release: 12 ottobre 2024", font=("Arial", 10))
     release_note_label.pack(pady=5)
 
     # Pulsante per chiudere la finestra modale
@@ -847,6 +847,18 @@ def open_advanced_dialog(parent_dialog):
         Selezione riga con il tasto sinistro del mouse
         Deseleziona tutte le righe se si seleziona qualcosa di diverso da una riga
         """
+        def hide_suggestions(event):
+            """
+            Nasconde il frame che contiene la `listbox_suggestions`
+            """
+            if event.widget != email_entry:
+                listbox_frame.place_forget()
+            
+            if event.widget == listbox_suggestions:
+                email_entry.focus_set()
+                
+        hide_suggestions(event)
+
         rows_in_email_and_threshold_tree = email_and_threshold_tree.get_children()
         selected_email_and_threshold = email_and_threshold_tree.selection()
 
@@ -862,41 +874,36 @@ def open_advanced_dialog(parent_dialog):
         else:
             email_and_threshold_tree.selection_remove(*selected_email_and_threshold)
 
-    def hide_suggestions(event=None):
-        """
-        Nasconde il frame che contiene la `listbox_suggestion_emails`
-        """
-        listbox_frame.place_forget()
-
     def update_suggestions(*args):
         """
-        Aggiorna i suggerimenti nella `listbox_suggestion_emails` in base al testo inserito in `email_entry`
+        Aggiorna i suggerimenti nella `listbox_suggestions` in base al testo inserito in `email_entry`
         """
         typed_text = email_entry_var.get().strip().lower()
 
         # Reset della lista di suggerimenti
-        listbox_suggestion_emails.delete(0, tk.END)
+        listbox_suggestions.delete(0, tk.END)
 
         if typed_text:
             # Ricerca dei nomi dei prodotti che contengono il testo digitato
-            matching_suggestions = [email for email in emails if typed_text in email.lower()]
+            matching_suggestions_start = sorted([email for email in emails if email.lower().startswith(typed_text)])
+            matching_suggestions_contain = sorted([email for email in emails if typed_text in email.lower() and not email.lower().startswith(typed_text)])
+            matching_suggestions = matching_suggestions_start + matching_suggestions_contain
 
-            # Aggiunta del testo corrente alla lista dei suggerimenti qual'ora non fosse già presente
-            if email_entry.get() not in matching_suggestions:
-                listbox_suggestion_emails.insert(tk.END, email_entry.get())
+            if len(matching_suggestions) == 0:
+                listbox_frame.place_forget()
+            else:
+                # Aggiunta dei suggerimenti alla lista dei suggerimenti
+                for suggestion in matching_suggestions:
+                    listbox_suggestions.insert(tk.END, suggestion)
 
-            # Aggiunta dei suggerimenti alla lista dei suggerimenti
-            for suggestion in matching_suggestions:
-                listbox_suggestion_emails.insert(tk.END, suggestion)
+                # Impostazione altezza massima della lista dei suggerimenti
+                listbox_suggestions.config(height=min(len(matching_suggestions), 5))
 
-            # Impostazione altezza massima della lista dei suggerimenti
-            listbox_suggestion_emails.config(height=min(len(matching_suggestions), 5))
-
-            # Posiziona il frame che contiene la lista dei suggerimenti sotto il campo di input
-            listbox_frame.place(x=email_entry.winfo_x(), y=email_entry.winfo_y() + email_entry.winfo_height(), anchor="nw")
-            
-            # Solleva la lista dei suggerimenti in cima a tutti gli altri widget
-            listbox_suggestion_emails.lift()
+                # Posiziona il frame che contiene la lista dei suggerimenti sotto il campo di input
+                listbox_frame.place(x=email_entry.winfo_x(), y=email_entry.winfo_y() + email_entry.winfo_height(), anchor="nw")
+                
+                # Solleva la lista dei suggerimenti in cima a tutti gli altri widget
+                listbox_suggestions.lift()
         else:
             # Nasconde la lista dei suggerimenti qual'ora non venga digitato alcun testo
             listbox_frame.place_forget()
@@ -905,16 +912,16 @@ def open_advanced_dialog(parent_dialog):
         """
         Selezione del suggerimento e trascrizione in `email_entry`
         """
-        selected_suggestion_index = listbox_suggestion_emails.curselection()
+        selected_suggestion_index = listbox_suggestions.curselection()
 
         if selected_suggestion_index:
-            selected_suggestion_name = listbox_suggestion_emails.get(selected_suggestion_index[0])
+            selected_suggestion_name = listbox_suggestions.get(selected_suggestion_index[0])
 
             # Reset e riempimento in `email_entry`
             email_entry.delete(0, tk.END)
             email_entry.insert(0, selected_suggestion_name)
 
-            listbox_frame.place_forget()
+            advanced_dialog.focus_set()
 
     def show_email_and_threshold_menu(event):
         """
@@ -1010,12 +1017,12 @@ def open_advanced_dialog(parent_dialog):
     listbox_frame = ttk.Frame(advanced_dialog)
     listbox_frame.place_forget()
 
-    listbox_suggestion_emails = tk.Listbox(listbox_frame, width=50)
-    listbox_suggestion_emails.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    listbox_suggestions = tk.Listbox(listbox_frame, width=50)
+    listbox_suggestions.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical", command=listbox_suggestion_emails.yview)
+    scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical", command=listbox_suggestions.yview)
     scrollbar.pack(side="right", fill="y")
-    listbox_suggestion_emails.config(yscrollcommand=scrollbar.set)
+    listbox_suggestions.config(yscrollcommand=scrollbar.set)
 
     # Soglia
     ttk.Label(container, text="Soglia:").grid(row=1, column=0, padx=10, pady=10, sticky="we")
@@ -1062,13 +1069,12 @@ def open_advanced_dialog(parent_dialog):
     email_threshold_menu.add_command(label="Rimuovi Email", command=remove_email)
 
     # Definizione eventi widget
-    advanced_dialog.bind("<Button-1>", click_email_and_threshold_tree)
+    advanced_dialog.bind("<Button-1>", lambda event: click_email_and_threshold_tree(event))
 
     email_entry.bind("<Button-3>", lambda e: show_text_menu(e, email_entry))
     email_entry.bind("<FocusIn>", update_suggestions)
-    email_entry.bind("<FocusOut>", hide_suggestions)
 
-    listbox_suggestion_emails.bind("<<ListboxSelect>>", on_select_suggestion)
+    listbox_suggestions.bind("<<ListboxSelect>>", on_select_suggestion)
 
     threshold_entry.bind("<Button-3>", lambda e: show_text_menu(e, threshold_entry))
 
@@ -1097,7 +1103,11 @@ def open_add_product_dialog():
         """
         Nasconde il frame che contiene la `listbox_suggestions`
         """
-        listbox_frame.place_forget()
+        if event.widget != name_entry:
+            listbox_frame.place_forget()
+        
+        if event.widget == listbox_suggestions:
+            name_entry.focus_set()
 
     def update_suggestions(*args):
         """
@@ -1110,24 +1120,25 @@ def open_add_product_dialog():
 
         if typed_text:
             # Ricerca dei nomi dei prodotti che contengono il testo digitato
-            matching_suggestions = [name for name in prices.keys() if typed_text in name.lower()]
+            matching_suggestions_start = sorted([name for name in prices.keys() if name.lower().startswith(typed_text)])
+            matching_suggestions_contain = sorted([name for name in prices.keys() if typed_text in name.lower() and not name.lower().startswith(typed_text)])
+            matching_suggestions = matching_suggestions_start + matching_suggestions_contain
 
-            # Aggiunta del testo corrente alla lista dei suggerimenti qual'ora non fosse già presente
-            if name_entry.get() not in matching_suggestions:
-                listbox_suggestions.insert(tk.END, name_entry.get())
+            if len(matching_suggestions) == 0:
+                listbox_frame.place_forget()
+            else:
+                # Aggiunta dei suggerimenti alla lista dei suggerimenti
+                for suggestion in matching_suggestions:
+                    listbox_suggestions.insert(tk.END, suggestion)
 
-            # Aggiunta dei suggerimenti alla lista dei suggerimenti
-            for suggestion in matching_suggestions:
-                listbox_suggestions.insert(tk.END, suggestion)
+                # Impostazione altezza massima della lista dei suggerimenti
+                listbox_suggestions.config(height=min(len(matching_suggestions), 5))
 
-            # Impostazione altezza massima della lista dei suggerimenti
-            listbox_suggestions.config(height=min(len(matching_suggestions), 5))
-
-            # Posiziona il frame che contiene la lista dei suggerimenti sotto il campo di input
-            listbox_frame.place(x=name_entry.winfo_x(), y=name_entry.winfo_y() + name_entry.winfo_height(), anchor="nw")
-            
-            # Solleva la lista dei suggerimenti in cima a tutti gli altri widget
-            listbox_suggestions.lift()
+                # Posiziona il frame che contiene la lista dei suggerimenti sotto il campo di input
+                listbox_frame.place(x=name_entry.winfo_x(), y=name_entry.winfo_y() + name_entry.winfo_height(), anchor="nw")
+                
+                # Solleva la lista dei suggerimenti in cima a tutti gli altri widget
+                listbox_suggestions.lift()
         else:
             # Nasconde la lista dei suggerimenti qual'ora non venga digitato alcun testo
             listbox_frame.place_forget()
@@ -1145,7 +1156,7 @@ def open_add_product_dialog():
             name_entry.delete(0, tk.END)
             name_entry.insert(0, selected_suggestion_name)
 
-            listbox_frame.place_forget()
+            add_product_dialog.focus_set()
 
     def add_product(name, url):
         """
@@ -1289,11 +1300,12 @@ def open_add_product_dialog():
     # Definizione eventi widget
     name_entry.bind("<Button-3>", lambda e: show_text_menu(e, name_entry))
     name_entry.bind("<FocusIn>", update_suggestions)
-    name_entry.bind("<FocusOut>", hide_suggestions)
 
     listbox_suggestions.bind("<<ListboxSelect>>", on_select_suggestion)
 
     url_text.bind("<Button-3>", lambda e: show_text_menu(e, url_text))
+
+    add_product_dialog.bind("<Button-1>", hide_suggestions)
 
     center_window(add_product_dialog)
 
