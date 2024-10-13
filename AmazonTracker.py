@@ -345,41 +345,48 @@ def reset_filters(reset_search_bar=True):
     """
     Reimposta i filtri e ordina i prodotti per data di ultima modifica
     """
-    global products_to_view, sort_state
 
-    # Reimposta lo stato dell'ordinamento
-    sort_state = {"column": None, "order": 0}
+    # Tentativo di ottenere il lock senza bloccare se è già in uso
+    if reset_filters_lock.acquire(blocking=False):
+        try:
+            global products_to_view, sort_state
 
-    # Elenco dei prodotti da visualizzare come lista di tuple
-    list_products_to_view = list(products_to_view.items())
+            # Reimposta lo stato dell'ordinamento
+            sort_state = {"column": None, "order": 0}
 
-    # Mappa delle funzioni di ordinamento per ciascuna colonna
-    column_key_map = {
-        "Nome": lambda item: item[0].lower(),
-        "URL": lambda item: item[1]["url"].lower(),
-        "Prezzo": lambda item: item[1]["price"] if isinstance(item[1]["price"], (int, float)) else float("inf"),
-        "Notifica": lambda item: item[1]["notify"],
-        "Timer": lambda item: item[1]["timer"],
-        "Timer Aggiornamento [s]": lambda item: item[1]["timer_refresh"],
-        "Data Inserimento": lambda item: item[1]["date_added"],
-        "Data Ultima Modifica": lambda item: item[1]["date_edited"],
-    }
+            # Elenco dei prodotti da visualizzare come lista di tuple
+            list_products_to_view = list(products_to_view.items())
 
-    # Ordinamento dei prodotti per data di ultima modifica
-    list_products_to_view.sort(key=column_key_map["Data Ultima Modifica"])
+            # Mappa delle funzioni di ordinamento per ciascuna colonna
+            column_key_map = {
+                "Nome": lambda item: item[0].lower(),
+                "URL": lambda item: item[1]["url"].lower(),
+                "Prezzo": lambda item: item[1]["price"] if isinstance(item[1]["price"], (int, float)) else float("inf"),
+                "Notifica": lambda item: item[1]["notify"],
+                "Timer": lambda item: item[1]["timer"],
+                "Timer Aggiornamento [s]": lambda item: item[1]["timer_refresh"],
+                "Data Inserimento": lambda item: item[1]["date_added"],
+                "Data Ultima Modifica": lambda item: item[1]["date_edited"],
+            }
 
-    # Aggiornamento ordine dei prodotti da visualizzare
-    products_to_view = {name: details for name, details in list_products_to_view}
+            # Ordinamento dei prodotti per data di ultima modifica
+            list_products_to_view.sort(key=column_key_map["Data Ultima Modifica"])
 
-    # Ripristino delle intestazioni delle colonne nella TreeView
-    for column in columns:
-        products_tree.heading(column, text=column, anchor="center")
+            # Aggiornamento ordine dei prodotti da visualizzare
+            products_to_view = {name: details for name, details in list_products_to_view}
 
-    # Reset della barra di ricerca quando richiesto
-    if reset_search_bar:
-        search_entry.delete(0, tk.END)
-        search_entry.insert(0, placeholder_text)
-        search_entry.config(fg='grey')
+            # Ripristino delle intestazioni delle colonne nella TreeView
+            for column in columns:
+                products_tree.heading(column, text=column, anchor="center")
+
+            # Reset della barra di ricerca quando richiesto
+            if reset_search_bar:
+                search_entry.delete(0, tk.END)
+                search_entry.insert(0, placeholder_text)
+                search_entry.config(fg='grey')
+        finally:
+            # Rilascio del lock alla fine dell'esecuzione
+            reset_filters_lock.release()
 
 
 def calculate_suggestion(all_prices, current_price, price_average, price_minimum, price_maximum):
@@ -686,29 +693,32 @@ def start_tracking(name, url):
             """
             Controlla il prezzo attuale e invia notifiche in caso di ribasso del prezzo
             """
-            # Recupera il prezzo attuale
-            current_price = get_price(url)
+            # Ottenere il lock in modalità bloccante (i thread aspetteranno il loro turno)
+            with check_price_lock:
+                print(threads[name])
+                # Recupera il prezzo attuale
+                current_price = get_price(url)
 
-            if current_price is None:
-                logger.warning(f"Non trovato il prezzo di {name} sulla pagina {url}")
-                return
-            
-            # Verifica se le notifiche del prodotto sono attivate
-            if products[name]["notify"]:
-                # Recupera l'ultimo prezzo memorizzato del prodotto
-                previous_price = get_last_price(name)
-                
-                if previous_price is None:
-                    logger.warning(f"Non trovato il prezzo di {name} nelle liste")
+                if current_price is None:
+                    logger.warning(f"Non trovato il prezzo di {name} sulla pagina {url}")
                     return
                 
-                send_notification_and_email(name, previous_price, current_price)
+                # Verifica se le notifiche del prodotto sono attivate
+                if products[name]["notify"]:
+                    # Recupera l'ultimo prezzo memorizzato del prodotto
+                    previous_price = get_last_price(name)
+                    
+                    if previous_price is None:
+                        logger.warning(f"Non trovato il prezzo di {name} nelle liste")
+                        return
+                    
+                    send_notification_and_email(name, previous_price, current_price)
 
-            # Aggiornamento del prodotto
-            products[name]["price"] = current_price
+                # Aggiornamento del prodotto
+                products[name]["price"] = current_price
 
-            save_price(name, products[name]["price"])
-            save_products()
+                save_price(name, products[name]["price"])
+                save_products()
 
         # Ripeti il loop finchè l'evento non viene settato
         while not stop_events[name].is_set():
@@ -2508,6 +2518,9 @@ images_dir = os.path.join(os.getcwd(), "images")
 
 threads = {}
 stop_events = {}
+reset_filters_lock = threading.Lock()
+check_price_lock = threading.Lock()
+
 
 sort_state = {
     "column": None,
