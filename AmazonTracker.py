@@ -327,7 +327,7 @@ def open_about_dialog():
     name_label.pack(pady=10)
 
     # Label con il numero di versione/release
-    release_label = tk.Label(about_dialog, text="Versione: 3.4.0", font=("Arial", 12))
+    release_label = tk.Label(about_dialog, text="Versione: 3.4.1", font=("Arial", 12))
     release_label.pack(pady=5)
 
     # Label con un eventuale numero di release successiva
